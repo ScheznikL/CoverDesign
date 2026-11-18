@@ -1,10 +1,12 @@
 package com.example.coverdesign.ui.navigation
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,15 +67,23 @@ fun AppScaffold() {
         Screen.NewOrder.route,
         Screen.NewInsoleOrder.route,
         Screen.SelectRole.route,
-        Screen.RehabHistory.route
+        Screen.RehabHistory.route,
+        Screen.Gait.route,
+        Screen.GaitProfile.route,
+        Screen.SensorCamera.route
     )
 
     val hidePatientBottomBar = !isClinicianRoute && currentRoute in patientHiddenRoutes
+    val isFullscreenCapture = currentRoute == Screen.Gait.route ||
+        currentRoute == Screen.GaitProfile.route || currentRoute == Screen.SensorCamera.route
 
     val isAuthenticated2 by authRepo.isAuthenticated()
         .collectAsStateWithLifecycle(initialValue = isAuthenticated)
 
     Scaffold(
+        // Each capture screen owns its insets, top bar and exit/unsaved-result handling.
+        contentWindowInsets = if (isFullscreenCapture) WindowInsets(0, 0, 0, 0)
+            else ScaffoldDefaults.contentWindowInsets,
         bottomBar = {
             when {
                 isClinicianRoute -> ClinicianBottomNavBar(

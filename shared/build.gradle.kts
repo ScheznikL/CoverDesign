@@ -10,7 +10,6 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.sqldelight)
     alias(libs.plugins.kotlinxSerialization)
-    alias(libs.plugins.googleGmsGoogleServices)
 }
 
 kotlin {

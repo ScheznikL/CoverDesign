@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +60,22 @@ fun ErrorScreen(message: String, onRetry: (() -> Unit)? = null, modifier: Modifi
             Spacer(Modifier.height(16.dp))
             Button(onClick = it) { Text("Retry") }
         }
+    }
+}
+
+@Composable
+fun DemoRehabilitationNotice(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+    ) {
+        Text(
+            "Demo data — not your gait measurements. Your measured angles are in Gait analysis.",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(12.dp)
+        )
     }
 }
 

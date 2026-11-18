@@ -4,6 +4,8 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
+import com.example.coverdesign.gait.GaitFeature
+import com.example.coverdesign.ui.screens.patient.preview.ModelEntryScreen
 import com.example.coverdesign.ui.screens.ProfileScreen
 import com.example.coverdesign.ui.screens.patient.config.ProductConfigScreen
 import com.example.coverdesign.ui.screens.patient.home.HomeScreen
@@ -28,16 +30,19 @@ fun NavGraphBuilder.patientGraph(
     ) {
 
 
-        // ── test: local 3D model on launch ───────────────────────────
-//        composable(Screen.Model3D.route) {
-//            ModelTestScreen(onBack = { navController.navigate(Screen.Home.route) })
-//        }
+        // A generated model requires an order; keep the generic Home action reachable.
+        composable(Screen.Model3D.route) {
+            ModelEntryScreen(
+                onNewOrder = { navController.navigate(Screen.NewOrder.route) },
+                onBack = { navController.popBackStack() }
+            )
+        }
 
         // ── bottom nav roots ──────────────────────────────────────────
         composable(Screen.Home.route) {
             HomeScreen(
                 onNewOrder = { navController.navigate(Screen.NewOrder.route) },
-                on3DVisualize = { navController.navigate(Screen.Model3D.route) },
+                on3DVisualize = { navController.navigate(Screen.Model3D.createRoute("cover")) },
                 onOrderClick = { orderId ->
                     navController.navigate(Screen.OrderDetail.createRoute(orderId))
                 },
@@ -45,7 +50,10 @@ fun NavGraphBuilder.patientGraph(
                 onOpenRehabHistory = { navController.navigate(Screen.RehabHistory.route) },
                 onOpenRecommendations = { navController.navigate(Screen.PatientRecommendations.route) },
                 onOrderInsoles = { navController.navigate(Screen.NewInsoleOrder.route) },
-                onStartRehabScan = { navController.navigate(Screen.SensorCamera.route) }
+                onStartRehabScan = { navController.navigate(Screen.SensorCamera.route) },
+                onGaitAnalysis = { navController.navigate(Screen.Gait.route) },
+                onGaitHistory = { navController.navigate(Screen.GaitHistory.route) },
+                onRecordVideo = { navController.navigate(Screen.SensorCamera.route) }
             )
         }
         composable(Screen.RehabHistory.route) {
@@ -99,7 +107,16 @@ fun NavGraphBuilder.patientGraph(
             )
         }
         composable(Screen.Profile.route) {
-            ProfileScreen()
+            ProfileScreen(onGaitProfile = { navController.navigate(Screen.GaitProfile.route) })
+        }
+        composable(Screen.Gait.route) {
+            GaitFeature(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.GaitProfile.route) {
+            GaitFeature(onBack = { navController.popBackStack() }, openProfile = true)
+        }
+        composable(Screen.GaitHistory.route) {
+            GaitFeature(onBack = { navController.popBackStack() }, openHistory = true)
         }
 
         composable(Screen.NewOrder.route) {

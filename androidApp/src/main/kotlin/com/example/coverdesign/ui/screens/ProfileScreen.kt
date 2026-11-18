@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
@@ -30,6 +29,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.WorkOutline
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,12 +41,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.coverdesign.domain.model.AppUser
 import com.example.coverdesign.domain.model.UserRole
 import com.example.coverdesign.ui.components.AppTopBar
+import com.example.coverdesign.ui.theme.AppTheme
 import com.example.coverdesign.ui.viewmodel.AuthAction
 import com.example.coverdesign.ui.viewmodel.AuthViewModel
 import org.koin.compose.viewmodel.koinViewModel
@@ -56,19 +58,22 @@ import java.util.Locale
 
 @Composable
 fun ProfileScreen(
-    viewModel: AuthViewModel = koinViewModel()
+    viewModel: AuthViewModel = koinViewModel(),
+    onGaitProfile: (() -> Unit)? = null
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     ProfileContent(
         appUser = state.appUser,
-        onSignOut = { viewModel.onAction(AuthAction.SignOut) }
+        onSignOut = { viewModel.onAction(AuthAction.SignOut) },
+        onGaitProfile = onGaitProfile
     )
 }
 
 @Composable
 internal fun ProfileContent(
     appUser: AppUser?,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onGaitProfile: (() -> Unit)? = null
 ) {
     Scaffold(
         topBar = { AppTopBar(title = "Profile") }
@@ -143,7 +148,7 @@ internal fun ProfileContent(
             )
 
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.fillMaxWidth()
@@ -201,6 +206,19 @@ internal fun ProfileContent(
 
             HorizontalDivider()
 
+            onGaitProfile?.let { openGaitProfile ->
+                FilledTonalButton(
+                    onClick = openGaitProfile,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                        Text("Gait analysis profile", style = MaterialTheme.typography.titleSmall)
+                        Text("Height, weight, age and walking settings", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = null)
+                }
+            }
+
             // ── Settings options ──────────────────────────────────────────────
             Text(
                 "Settings",
@@ -210,7 +228,7 @@ internal fun ProfileContent(
             )
 
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.fillMaxWidth()
@@ -241,7 +259,7 @@ internal fun ProfileContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = MaterialTheme.shapes.medium,
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.error
                 ),
@@ -252,6 +270,14 @@ internal fun ProfileContent(
                 Text("Sign Out", style = MaterialTheme.typography.labelLarge)
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun GaitProfileEntryPreview() {
+    AppTheme {
+        ProfileContent(appUser = null, onSignOut = {}, onGaitProfile = {})
     }
 }
 
@@ -315,7 +341,7 @@ private fun SettingsRow(icon: ImageVector, label: String) {
 @Composable
 private fun RoleChip(role: UserRole) {
     Surface(
-        shape = RoundedCornerShape(50.dp),
+        shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.secondaryContainer
     ) {
         Text(

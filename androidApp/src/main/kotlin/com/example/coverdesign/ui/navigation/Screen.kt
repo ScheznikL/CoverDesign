@@ -17,6 +17,10 @@ sealed class Screen(val route: String) {
 
     object Orders : Screen("orders")
     object Profile : Screen("profile")
+    object Gait : Screen("gait")
+    object GaitProfile : Screen("gait/profile")
+    object GaitHistory : Screen("gait/history")
+    object GaitCloud : Screen("gait/cloud")
 
     // detail screens
     object Catalog : Screen("catalog")
@@ -59,6 +63,7 @@ sealed class Screen(val route: String) {
     object PatientMain : Screen("patient_main")
     object ClinicianMain : Screen("clinician_main")
     object ClinicianHome : Screen("clinician_home")
+    object ClinicianProfile : Screen("clinician_profile")
     object WriteRecommendation : Screen("clinician/recommendation/{patientId}") {
         fun createRoute(patientId: String) = "clinician/recommendation/$patientId"
     }

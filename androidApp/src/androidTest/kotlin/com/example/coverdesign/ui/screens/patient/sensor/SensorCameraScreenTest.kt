@@ -8,8 +8,8 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Tests for SensorCameraScreen. Camera and audio permissions are not granted in the
- * test environment, so the permission-gate UI is shown instead of the live camera feed.
+ * The permission content is tested independently of grants made by other camera tests.
+ * The scanner title is checked through the real screen.
  */
 class SensorCameraScreenTest {
 
@@ -25,9 +25,9 @@ class SensorCameraScreenTest {
     }
 
     @Test
-    fun permissionGateHeadlineIsDisplayedWithoutCameraPermission() {
+    fun permissionGateHeadlineIsDisplayed() {
         composeTestRule.setContent {
-            SensorCameraScreen()
+            CameraPermissionGate(onRequest = {})
         }
         composeTestRule.onNodeWithText("Camera access needed").assertIsDisplayed()
     }
@@ -35,7 +35,7 @@ class SensorCameraScreenTest {
     @Test
     fun grantAccessButtonIsDisplayed() {
         composeTestRule.setContent {
-            SensorCameraScreen()
+            CameraPermissionGate(onRequest = {})
         }
         composeTestRule.onNodeWithText("Grant access").assertIsDisplayed()
     }
@@ -43,7 +43,7 @@ class SensorCameraScreenTest {
     @Test
     fun grantAccessButtonIsEnabled() {
         composeTestRule.setContent {
-            SensorCameraScreen()
+            CameraPermissionGate(onRequest = {})
         }
         composeTestRule.onNodeWithText("Grant access").assertIsEnabled()
     }
@@ -51,7 +51,7 @@ class SensorCameraScreenTest {
     @Test
     fun permissionExplanationTextIsDisplayed() {
         composeTestRule.setContent {
-            SensorCameraScreen()
+            CameraPermissionGate(onRequest = {})
         }
         composeTestRule.onNodeWithText(
             "The sensor scanner uses your camera to detect body pose and " +

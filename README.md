@@ -1,5 +1,19 @@
 # CoverDesign
 
+The local **1.3.1** Android build is based on `stable/v1` and includes live gait
+analysis with estimated pose landmarks or coloured markers, marker-video analysis,
+session summaries and separate daily statistics for each measurement method.
+Marker colours are selected only from body images. Real Home charts, compact
+Firebase result sync, explicit patient-to-doctor sharing and full doctor session
+reports with the same per-session graphs as the patient are included;
+Full-report Firebase rules are published in the configured `coverdesign-dev`
+project, including protected detail chunks for session graphs. A
+different Firebase project needs its own reviewed rules (see `firebase-gait/`).
+This branch integrates the module onto the author's updated stable/v1 at6f574ef.
+See [Ukrainian handoff](HANDOFF_UK.md), [author Firebase setup](firebase-gait/AUTHOR_SETUP_UK.md)
+and [integration verification](INTEGRATION_VERIFICATION.md).
+See [Gait analysis setup and behaviour](GAIT_ANALYSIS.md).
+
 A Kotlin Multiplatform (KMM) application for designing, configuring, and ordering customized prosthetic covers, insoles, and accessories. The app supports AI-driven 3D model generation from user specifications and AR-based virtual try-on powered by ARCore.
 
 ---

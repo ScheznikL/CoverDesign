@@ -1,0 +1,226 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // GENERATED: npm run build:dev. For a fresh DEVELOPMENT database only.
+    // Includes the tested gait fragment and minimal owner-only app paths.
+    // Never replace unknown production rules with this file.
+    function gaitSignedIn() {
+      return request.auth != null;
+    }
+    function gaitOwns(uid) {
+      return gaitSignedIn() && request.auth.uid == uid;
+    }
+    function gaitHasRole(uid, role) {
+      return exists(/databases/$(database)/documents/users/$(uid))
+        && get(/databases/$(database)/documents/users/$(uid)).data.role == role;
+    }
+    function gaitDoctor() {
+      return gaitSignedIn() && gaitHasRole(request.auth.uid, 'DOCTOR');
+    }
+    function gaitValidCode(code) {
+      return code is string && code.matches('^[A-F0-9]{32}$');
+    }
+    function gaitValidInvitation(code, doctorUid) {
+      return gaitValidCode(code) && doctorUid is string
+        && exists(/databases/$(database)/documents/gaitDoctorCodes/$(code))
+        && get(/databases/$(database)/documents/gaitDoctorCodes/$(code)).data.doctorUid == doctorUid
+        && gaitHasRole(doctorUid, 'DOCTOR');
+    }
+    function gaitValidShareInvitation(data) {
+      return gaitValidInvitation(data.doctorCode, data.doctorUid)
+        && data.doctorDisplayName == get(/databases/$(database)/documents/gaitDoctorCodes/$(data.doctorCode)).data.doctorDisplayName;
+    }
+    function gaitValidShare(data, patientUid) {
+      return data.keys().hasAll(['patientUid', 'doctorUid', 'doctorCode',
+          'doctorDisplayName', 'patientDisplayName', 'active', 'updatedAt'])
+        && data.keys().hasOnly(['patientUid', 'doctorUid', 'doctorCode',
+          'doctorDisplayName', 'patientDisplayName', 'active', 'updatedAt'])
+        && data.patientUid == patientUid && data.doctorUid != patientUid
+        && data.doctorUid is string && gaitValidCode(data.doctorCode)
+        && data.doctorDisplayName is string && data.doctorDisplayName.size() > 0
+        && data.doctorDisplayName.size() <= 120
+        && data.patientDisplayName is string && data.patientDisplayName.size() <= 120
+        && data.active is bool && gaitMillis(data.updatedAt);
+    }
+    function gaitLinkedDoctor(patientUid) {
+      let path = /databases/$(database)/documents/gaitShares/$(patientUid);
+      return gaitDoctor() && exists(path)
+        && get(path).data.patientUid == patientUid
+        && get(path).data.doctorUid == request.auth.uid
+        && get(path).data.active == true
+        && gaitValidInvitation(get(path).data.doctorCode, request.auth.uid);
+    }
+    function gaitBoundedInt(value, maximum) {
+      return value is int && value >= 0 && value <= maximum;
+    }
+    function gaitMillis(value) {
+      return value is int && value > 0 && value <= request.time.toMillis() + 300000;
+    }
+    function gaitAngle(angles, key) {
+      return !(key in angles)
+        || (angles[key] is number && angles[key] >= 0 && angles[key] <= 90);
+    }
+    function gaitSampleCount(counts, key, acceptedFrames) {
+      return !(key in counts)
+        || (counts[key] is int && counts[key] > 0 && counts[key] <= 30000
+          && counts[key] <= acceptedFrames);
+    }
+    function gaitValidMetrics(data) {
+      let keys = ['FRONT_SHOULDERS', 'FRONT_PELVIS', 'FRONT_KNEES',
+        'BACK_SHOULDERS', 'BACK_PELVIS', 'BACK_SPINE'];
+      let angles = data.typicalInclinations;
+      let counts = data.sampleCounts;
+      return angles is map && counts is map && angles.keys().hasOnly(keys)
+        && angles.keys() == counts.keys()
+        && (data.measurementMethod == 'MARKERS' || !('BACK_SPINE' in angles))
+        && gaitAngle(angles, 'FRONT_SHOULDERS') && gaitAngle(angles, 'FRONT_PELVIS')
+        && gaitAngle(angles, 'FRONT_KNEES') && gaitAngle(angles, 'BACK_SHOULDERS')
+        && gaitAngle(angles, 'BACK_PELVIS') && gaitAngle(angles, 'BACK_SPINE')
+        && gaitSampleCount(counts, 'FRONT_SHOULDERS', data.acceptedFrames)
+        && gaitSampleCount(counts, 'FRONT_PELVIS', data.acceptedFrames)
+        && gaitSampleCount(counts, 'FRONT_KNEES', data.acceptedFrames)
+        && gaitSampleCount(counts, 'BACK_SHOULDERS', data.acceptedFrames)
+        && gaitSampleCount(counts, 'BACK_PELVIS', data.acceptedFrames)
+        && gaitSampleCount(counts, 'BACK_SPINE', data.acceptedFrames)
+        && data.qualifiedMetrics is list
+        && data.qualifiedMetrics.size() == data.qualifiedMetrics.toSet().size()
+        && data.qualifiedMetrics.toSet().hasOnly(angles.keys());
+    }
+    function gaitValidDetailManifest(manifest) {
+      return manifest is map
+        && manifest.keys().hasAll(['formatVersion', 'chunkCount', 'sha256', 'compressedBytes', 'uncompressedBytes'])
+        && manifest.keys().hasOnly(['formatVersion', 'chunkCount', 'sha256', 'compressedBytes', 'uncompressedBytes'])
+        && manifest.formatVersion is int && manifest.formatVersion == 1
+        && manifest.chunkCount is int && manifest.chunkCount >= 1 && manifest.chunkCount <= 64
+        && manifest.sha256 is string && manifest.sha256.matches('^[0-9a-f]{64}$')
+        && manifest.compressedBytes is int && manifest.compressedBytes >= 1 && manifest.compressedBytes <= 6291456
+        && manifest.uncompressedBytes is int && manifest.uncompressedBytes >= 1 && manifest.uncompressedBytes <= 12582912;
+    }
+    function gaitValidDetailChunk(data, chunkId, patientUid, sessionId) {
+      let parent = getAfter(/databases/$(database)/documents/gaitReports/$(patientUid)/sessions/$(sessionId)).data;
+      return data.keys().hasAll(['index', 'payload']) && data.keys().hasOnly(['index', 'payload'])
+        && data.index is int && data.index >= 0 && data.index <= 63
+        && chunkId.matches('^([0-9]|[1-5][0-9]|6[0-3])$') && chunkId == string(data.index)
+        && data.payload is string && data.payload.size() > 0 && data.payload.size() <= 131072
+        && data.payload.size() % 4 == 0 && data.payload.matches('^[A-Za-z0-9+/]+={0,2}$')
+        && 'detailManifest' in parent && parent.detailManifest.formatVersion == 1
+        && data.index < parent.detailManifest.chunkCount;
+    }
+    function gaitDetailParentExists(patientUid, sessionId) {
+      let path = /databases/$(database)/documents/gaitReports/$(patientUid)/sessions/$(sessionId);
+      return exists(path) && 'detailManifest' in get(path).data;
+    }
+    function gaitValidReport(data, patientUid, sessionId) {
+      return data.keys().hasAll(['schemaVersion', 'sessionId', 'patientUid', 'createdAt',
+          'measurementMethod', 'acquisitionSource', 'protocolVersion', 'completed',
+          'manualLevel', 'comparisonGroupId', 'typicalInclinations', 'sampleCounts',
+          'qualifiedMetrics', 'acceptedFrames', 'rejectedFrames',
+          'frontValidDurationMs', 'backValidDurationMs'])
+        && data.keys().hasOnly(['schemaVersion', 'sessionId', 'patientUid', 'createdAt',
+          'measurementMethod', 'acquisitionSource', 'protocolVersion', 'completed',
+          'manualLevel', 'comparisonGroupId', 'typicalInclinations', 'sampleCounts',
+          'qualifiedMetrics', 'acceptedFrames', 'rejectedFrames',
+          'frontValidDurationMs', 'backValidDurationMs', 'detailManifest'])
+        && data.schemaVersion == 1 && data.schemaVersion is int
+        && data.patientUid == patientUid && data.sessionId == sessionId
+        && sessionId.matches('^[A-Za-z0-9_-]{1,128}$')
+        && gaitMillis(data.createdAt)
+        && data.measurementMethod in ['MARKERS', 'POSE']
+        && data.acquisitionSource in ['LIVE', 'VIDEO']
+        && data.protocolVersion is int && data.protocolVersion > 0 && data.protocolVersion <= 100
+        && data.completed is bool && data.manualLevel is bool
+        && data.comparisonGroupId is string && data.comparisonGroupId.matches('^[0-9a-f]{64}$')
+        && gaitBoundedInt(data.acceptedFrames, 10000000)
+        && gaitBoundedInt(data.rejectedFrames, 10000000)
+        && gaitBoundedInt(data.frontValidDurationMs, 2678400000)
+        && gaitBoundedInt(data.backValidDurationMs, 2678400000)
+        && (!('detailManifest' in data) || gaitValidDetailManifest(data.detailManifest))
+        && gaitValidMetrics(data);
+    }
+
+    match /gaitDoctorCodes/{code} {
+      allow get: if gaitSignedIn() && gaitValidCode(code)
+        && (resource.data.doctorUid == request.auth.uid || gaitHasRole(request.auth.uid, 'PATIENT'));
+      allow list: if false;
+      allow create: if gaitDoctor() && gaitValidCode(code)
+        && request.resource.data.keys().hasAll(['doctorUid', 'doctorDisplayName', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['doctorUid', 'doctorDisplayName', 'createdAt'])
+        && request.resource.data.doctorUid == request.auth.uid
+        && request.resource.data.doctorDisplayName is string
+        && request.resource.data.doctorDisplayName.size() > 0
+        && request.resource.data.doctorDisplayName.size() <= 120
+        && gaitMillis(request.resource.data.createdAt);
+      allow update: if false;
+      allow delete: if gaitDoctor() && resource.data.doctorUid == request.auth.uid;
+    }
+
+    match /gaitShares/{patientUid} {
+      allow get: if gaitOwns(patientUid)
+        || (gaitDoctor() && resource.data.doctorUid == request.auth.uid && resource.data.active == true);
+      // Firestore queries must constrain BOTH doctorUid and active. Rules are not filters.
+      allow list: if gaitDoctor()
+        && resource.data.doctorUid == request.auth.uid && resource.data.active == true;
+      allow create: if gaitOwns(patientUid) && gaitHasRole(patientUid, 'PATIENT')
+        && gaitValidShare(request.resource.data, patientUid)
+        && gaitValidShareInvitation(request.resource.data);
+      allow update: if gaitOwns(patientUid) && gaitHasRole(patientUid, 'PATIENT')
+        && gaitValidShare(request.resource.data, patientUid)
+        && ((!request.resource.data.active
+            && request.resource.data.doctorUid == resource.data.doctorUid
+            && request.resource.data.doctorCode == resource.data.doctorCode
+            && request.resource.data.doctorDisplayName == resource.data.doctorDisplayName)
+          || gaitValidShareInvitation(request.resource.data));
+      allow delete: if gaitOwns(patientUid);
+
+    }
+
+    match /gaitReports/{patientUid}/sessions/{sessionId} {
+      allow get, list: if gaitOwns(patientUid) || gaitLinkedDoctor(patientUid);
+      allow create: if gaitOwns(patientUid) && gaitHasRole(patientUid, 'PATIENT')
+        && gaitValidReport(request.resource.data, patientUid, sessionId);
+      allow update: if gaitOwns(patientUid) && gaitHasRole(patientUid, 'PATIENT')
+        && gaitValidReport(request.resource.data, patientUid, sessionId)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if gaitOwns(patientUid);
+
+      match /details/{chunkId} {
+        allow get, list: if gaitOwns(patientUid)
+          || (gaitLinkedDoctor(patientUid) && gaitDetailParentExists(patientUid, sessionId));
+        allow create, update: if gaitOwns(patientUid) && gaitHasRole(patientUid, 'PATIENT')
+          && gaitValidDetailChunk(request.resource.data, chunkId, patientUid, sessionId);
+        // Cleanup must remain possible after a parent has already been deleted.
+        allow delete: if gaitOwns(patientUid);
+      }
+    }
+
+    // Minimal existing app paths for a NEW DEVELOPMENT database only.
+    // Account roles are self-selected; an explicit gaitShare is still required.
+    function devValidProfile(data, uid) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'phone', 'role', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'phone', 'role', 'createdAt', 'hasInsoles'])
+        && data.uid == uid && data.role in ['PATIENT', 'DOCTOR']
+        && data.email is string && data.email.size() <= 320
+        && data.displayName is string && data.displayName.size() <= 120
+        && data.phone is string && data.phone.size() <= 80
+        && gaitMillis(data.createdAt)
+        && (!('hasInsoles' in data) || data.hasInsoles is bool);
+    }
+    match /users/{uid} {
+      // Missing own profiles may be read, then created after Firebase Auth login.
+      allow get: if gaitOwns(uid);
+      allow list, delete: if false;
+      allow create: if gaitOwns(uid) && devValidProfile(request.resource.data, uid);
+      allow update: if gaitOwns(uid) && devValidProfile(request.resource.data, uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      match /configs/{configId} {
+        allow get, list, create, update, delete: if gaitOwns(uid);
+      }
+      match /orders/{orderId} {
+        allow get, list, create, update, delete: if gaitOwns(uid);
+      }
+    }
+  }
+}

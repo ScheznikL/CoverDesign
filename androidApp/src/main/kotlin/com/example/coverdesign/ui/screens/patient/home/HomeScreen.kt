@@ -29,6 +29,8 @@ import androidx.compose.material.icons.outlined.AssignmentTurnedIn
 import androidx.compose.material.icons.outlined.BluetoothDisabled
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Chat
+import androidx.compose.material.icons.outlined.DirectionsWalk
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Phone
@@ -40,6 +42,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -68,6 +71,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -119,9 +123,13 @@ fun HomeScreen(
     onOpenRehabHistory: () -> Unit,
     onOpenRecommendations: () -> Unit = {},
     onOrderInsoles: () -> Unit = {},
-    onStartRehabScan: () -> Unit = {}
+    onStartRehabScan: () -> Unit = {},
+    onGaitAnalysis: () -> Unit = {},
+    onRecordVideo: () -> Unit = onStartRehabScan,
+    onGaitHistory: () -> Unit = onGaitAnalysis
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val gaitState = rememberGaitHomeState()
 
     EventHandler(viewModel.events) { event ->
         when (event) {
@@ -137,13 +145,19 @@ fun HomeScreen(
     }
 
     HomeContent(
-        state = state, onAction = viewModel::onAction
+        state = state, onAction = viewModel::onAction,
+        onGaitAnalysis = onGaitAnalysis, onRecordVideo = onRecordVideo,
+        gaitState = gaitState, onGaitHistory = onGaitHistory
     )
 }
 
 @Composable
 internal fun HomeContent(
-    state: HomeUiState, onAction: (HomeAction) -> Unit
+    state: HomeUiState, onAction: (HomeAction) -> Unit,
+    onGaitAnalysis: () -> Unit = {},
+    onRecordVideo: () -> Unit = { onAction(HomeAction.StartRehabScan) },
+    gaitState: GaitHomeUiState = GaitHomeUiState(),
+    onGaitHistory: () -> Unit = onGaitAnalysis
 ) {
     // Bounds of the top-bar info icon in root coordinates — drives the spotlight cutout.
     var infoIconBounds by remember { mutableStateOf<Rect?>(null) }
@@ -174,6 +188,14 @@ internal fun HomeContent(
             // ── Tools section ─────────────────────────────────────────────
             HomeSectionHeader(title = "Tools")
             ToolCard(
+                icon = Icons.Outlined.DirectionsWalk,
+                label = "Gait analysis",
+                tint = StatusBlue,
+                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+                onClick = onGaitAnalysis
+            )
+            Spacer(Modifier.height(8.dp))
+            ToolCard(
                 icon = Icons.Outlined.AssignmentTurnedIn,
                 label = "View Recommendations",
                 tint = PatientActiveTeal,
@@ -181,6 +203,30 @@ internal fun HomeContent(
                     .padding(horizontal = 16.dp)
                     .fillMaxWidth(),
                 onClick = { onAction(HomeAction.OpenRecommendations) })
+            Spacer(Modifier.height(8.dp))
+            ToolCard(
+                icon = Icons.Outlined.Videocam,
+                label = "Record video",
+                tint = StatusPurple,
+                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+                onClick = onRecordVideo
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            // Local gait angles are separate from the author's rehabilitation service data.
+            HomeSectionHeader(
+                title = "My gait measurements",
+                action = "View History",
+                onAction = onGaitHistory,
+                actionTag = "home-gait-view-history"
+            )
+            GaitHomeSummary(
+                state = gaitState,
+                onStart = onGaitAnalysis,
+                onHistory = onGaitHistory,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
 
             Spacer(Modifier.height(24.dp))
 
@@ -188,13 +234,27 @@ internal fun HomeContent(
             HomeSectionHeader(
                 title = "My Rehabilitation",
                 action = "View History",
-                onAction = { onAction(HomeAction.OpenRehabHistory) })
-            RehabSummaryCard(
-                latestSession = state.rehabSessions.firstOrNull(),
-                onOrderInsoles = { onAction(HomeAction.OrderInsoles) },
-                onStartScan = { onAction(HomeAction.StartRehabScan) },
-                modifier = Modifier.padding(horizontal = 16.dp)
+                onAction = { onAction(HomeAction.OpenRehabHistory) },
+                actionTag = "home-server-rehab-history"
             )
+            if (state.isLoadingRehab) {
+                Text(
+                    "Loading rehabilitation data…",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                        .testTag("home-server-rehab-loading")
+                )
+            } else {
+                RehabSummaryCard(
+                    latestSession = state.rehabSessions.firstOrNull(),
+                    onOrderInsoles = { onAction(HomeAction.OrderInsoles) },
+                    onStartScan = { onAction(HomeAction.StartRehabScan) },
+                    modifier = Modifier.padding(horizontal = 16.dp).testTag("home-server-rehab-summary")
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
 
@@ -657,7 +717,8 @@ private fun NewOrderBanner(onClick: () -> Unit, modifier: Modifier = Modifier) {
 // ── Section header ────────────────────────────────────────────────────────────
 @Composable
 private fun HomeSectionHeader(
-    title: String, action: String? = null, onAction: (() -> Unit)? = null
+    title: String, action: String? = null, onAction: (() -> Unit)? = null,
+    actionTag: String? = null
 ) {
     Row(
         modifier = Modifier
@@ -668,7 +729,11 @@ private fun HomeSectionHeader(
     ) {
         Text(title, style = MaterialTheme.typography.titleMedium)
         if (action != null && onAction != null) {
-            TextButton(onClick = onAction, contentPadding = PaddingValues(0.dp)) {
+            TextButton(
+                onClick = onAction,
+                modifier = actionTag?.let { Modifier.testTag(it) } ?: Modifier,
+                contentPadding = PaddingValues(0.dp)
+            ) {
                 Text(
                     text = action,
                     style = MaterialTheme.typography.labelMedium,
@@ -1128,7 +1193,7 @@ private fun HomeScreenPreview() {
                         status = OrderStatus.DELIVERED
                     )
                 ),
-                rehabSessions = RehabMockData.generateSessions(),
+                rehabSessions = emptyList(),
                 hasInsoles = true
             ),
             onAction = {}

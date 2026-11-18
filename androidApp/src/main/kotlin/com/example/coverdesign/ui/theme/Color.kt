@@ -83,3 +83,22 @@ val ScannerCyan     = Color(0xFF00E5FF)   // pose skeleton lines and landmark do
 
 // ── Overlay / coach-mark ────────────────────────────────────────────────────
 val ScrimDark       = Color(0xFF1A1A2E)   // dimming scrim behind spotlight coach-marks
+// ── Gait camera, photo selection and illustrative marker palette ───────────
+// Marker examples identify groups in the guide; measured paper colours come
+// from the patient's on-body photograph and are not theme colours.
+val GaitPhotoBackground = Color(0xFF18242C)
+val GaitSelectionCyan = Color(0xFF5CE1E6)
+val GaitOverlayBlack = Color(0xFF000000)
+val GaitOverlayWhite = NeutralWhite
+val GaitOverlayFallback = Color(0xFF888888)
+val GaitTrackingGreen = Color(0xFF4BDBA1)
+val GaitTransparent = Color.Transparent
+val GaitSilhouetteFill = GaitOverlayWhite.copy(alpha = .07f)
+val GaitSilhouetteDetail = GaitOverlayWhite.copy(alpha = .7f)
+val GaitReferenceGrid = GaitOverlayWhite.copy(alpha = .20f)
+val GaitMarkerOutline = GaitOverlayBlack.copy(alpha = .75f)
+val GaitMarkerShoulder = Color(0xFF00A86B)
+val GaitMarkerPelvis = Color(0xFF2474E8)
+val GaitMarkerKnee = Color(0xFFE42AD8)
+val GaitMarkerC7 = Color(0xFFE4CE16)
+val GaitMarkerCoccyx = Color(0xFFFF851B)

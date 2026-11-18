@@ -44,8 +44,8 @@ credentials = "1.6.0"
 credentialsPlayServicesAuth = "1.6.0"
 googleid = "1.2.0"
 animation = "1.11.4"
-mediapipe = "0.10.14"
-camerax = "1.4.1"
+mediapipe = "1.2.0"
+camerax = "1.6.2"
 
 
 [libraries]

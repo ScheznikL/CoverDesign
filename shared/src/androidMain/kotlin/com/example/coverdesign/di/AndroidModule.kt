@@ -6,7 +6,6 @@ import com.example.coverdesign.data.repoimpl.FirebaseCloudConfigRepositoryImpl
 import com.example.coverdesign.data.repoimpl.FirebaseStorageRepositoryImpl
 import com.example.coverdesign.domain.repo.CloudConfigRepository
 import com.example.coverdesign.domain.repo.StorageRepository
-import com.example.coverdesign.shared.R
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import org.koin.android.ext.koin.androidContext
@@ -23,9 +22,12 @@ val androidModule = module {
         FirebaseStorageRepositoryImpl(storage = get())
     }
     single {
+        val context = androidContext()
+        val clientIdResource = context.resources.getIdentifier(
+            "default_web_client_id", "string", context.packageName
+        )
         GoogleAuthenticator(
-            webClientId= androidContext().getString(R.string.web_id),
-
+            webClientId = if (clientIdResource != 0) context.getString(clientIdResource) else ""
         )
     }
     single<CloudConfigRepository> { FirebaseCloudConfigRepositoryImpl(firestore = get()) }

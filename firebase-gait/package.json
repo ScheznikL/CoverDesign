@@ -1,0 +1,18 @@
+{
+  "name": "coverdesign-gait-rules",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/test.mjs",
+    "test:dev": "node scripts/test.mjs --dev",
+    "emulators:android": "node scripts/android-emulators.mjs",
+    "build:dev": "node scripts/build-dev-rules.mjs",
+    "test:rules": "node --test --test-concurrency=1 test/firestore.rules.test.mjs",
+    "test:dev:rules": "node --test --test-concurrency=1 test/firestore.rules.test.mjs test/firestore.dev.test.mjs"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "6.0.0",
+    "firebase": "13.4.0",
+    "firebase-tools": "15.36.0"
+  }
+}

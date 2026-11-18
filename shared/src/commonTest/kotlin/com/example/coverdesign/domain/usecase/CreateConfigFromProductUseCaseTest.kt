@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
 
 class CreateConfigFromProductUseCaseTest {
 
-    private val testProduct = Product(
+    private val testProduct = Product.Generic(
         id = "prod-1",
         name = "Test Cover",
         description = "A test product",
