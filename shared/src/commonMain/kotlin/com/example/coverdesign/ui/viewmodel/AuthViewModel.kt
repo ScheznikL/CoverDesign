@@ -5,6 +5,7 @@ import com.example.coverdesign.data.remote.GoogleAuthenticator
 import com.example.coverdesign.domain.model.AppUser
 import com.example.coverdesign.domain.model.UserRole
 import com.example.coverdesign.domain.repo.FireAuthRepository
+import com.example.coverdesign.domain.usecase.LogoutUseCase
 import com.example.coverdesign.domain.util.Resource
 import com.example.coverdesign.domain.util.currentEpochMillis
 import com.example.coverdesign.ui.viewmodel.base.BaseViewModel
@@ -16,7 +17,8 @@ import kotlinx.coroutines.launch
 
 class AuthViewModel(
     private val authRepo: FireAuthRepository,
-    private val googleAuthenticator: GoogleAuthenticator
+    private val googleAuthenticator: GoogleAuthenticator,
+    private val logout: LogoutUseCase,
 ) : BaseViewModel<AuthUiState, AuthUiEvent>() {
 
     override fun initialState() = AuthUiState()
@@ -146,7 +148,7 @@ class AuthViewModel(
 
     private fun signOut() {
         viewModelScope.launch {
-            authRepo.signOut()
+            logout()
             setState { copy(currentUser = null) }
             sendEvent(AuthUiEvent.NavigateToLogin)
         }

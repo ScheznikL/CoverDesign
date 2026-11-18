@@ -62,3 +62,6 @@ selectOrderByConfigId:
 SELECT * FROM OrderEntity
 WHERE configId = :configId
 LIMIT 1;
+
+deleteAllOrders:
+DELETE FROM OrderEntity;

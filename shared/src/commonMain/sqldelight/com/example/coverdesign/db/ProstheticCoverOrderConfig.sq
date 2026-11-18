@@ -67,3 +67,6 @@ WHERE orderId = :orderId;
 deleteProstheticCoverOrder:
 DELETE FROM ProstheticCoverOrderConfigEntity
 WHERE orderId = :orderId;
+
+deleteAllProstheticCoverOrders:
+DELETE FROM ProstheticCoverOrderConfigEntity;

@@ -32,11 +32,13 @@ import com.example.coverdesign.domain.model.OrderListItem
 import com.example.coverdesign.domain.model.OrderStatus
 import com.example.coverdesign.ui.components.AppTopBar
 import com.example.coverdesign.ui.components.OrderStatusChip
+import com.example.coverdesign.ui.components.OrdersSyncErrorBanner
 import com.example.coverdesign.ui.screens.patient.home.formatDate
 import com.example.coverdesign.ui.theme.AppTheme
 import com.example.coverdesign.ui.viewmodel.OrderListFilter
 import com.example.coverdesign.ui.viewmodel.OrderListUiState
 import com.example.coverdesign.ui.viewmodel.OrderListViewModel
+import com.example.coverdesign.ui.viewmodel.OrderSyncStatus
 import org.koin.compose.viewmodel.koinViewModel
 import java.util.Locale
 
@@ -49,7 +51,8 @@ fun OrdersListScreen(
     OrdersListContent(
         state        = state,
         onOrderClick = onOrderClick,
-        onFilterSelect = viewModel::setFilter
+        onFilterSelect = viewModel::setFilter,
+        onRetry      = viewModel::refresh
     )
 }
 
@@ -57,13 +60,21 @@ fun OrdersListScreen(
 internal fun OrdersListContent(
     state          : OrderListUiState,
     onOrderClick   : (String) -> Unit,
-    onFilterSelect : (OrderListFilter) -> Unit
+    onFilterSelect : (OrderListFilter) -> Unit,
+    onRetry        : () -> Unit = {}
 ) {
     Scaffold(
         topBar = { AppTopBar(title = "My Orders") }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             FilterRow(selected = state.filter, onSelect = onFilterSelect)
+
+            if (state.syncStatus == OrderSyncStatus.FAILED) {
+                OrdersSyncErrorBanner(
+                    onRetry  = onRetry,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
 
             if (state.visibleItems.isEmpty()) {
                 Box(

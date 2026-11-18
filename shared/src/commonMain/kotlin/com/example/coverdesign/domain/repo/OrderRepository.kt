@@ -35,6 +35,12 @@ interface OrderRepository {
 
     // ── Unified detail lookup (all order types) ────────────────────────────────
     suspend fun getOrderDetailById(id: String): Resource<OrderDetail>
-    suspend fun refreshOrders(): Flow<List<OrderListItem>>
     suspend fun getOrderById(orderId: String): Resource<Order>
+
+    // ── Remote sync (Firestore, per-user) ──────────────────────────────────────
+    /** Reloads the signed-in user's orders from Firestore into the local DB. */
+    suspend fun syncOrdersFromRemote(): Resource<Unit>
+
+    /** Wipes all locally-cached orders and related configs (e.g. on sign-out). */
+    suspend fun clearLocalOrders(): Resource<Unit>
 }

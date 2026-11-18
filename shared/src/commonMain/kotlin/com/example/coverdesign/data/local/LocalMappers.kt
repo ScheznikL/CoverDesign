@@ -235,11 +235,14 @@ fun InsoleOrderConfigEntity.toDomain(): InsoleOrderConfig = InsoleOrderConfig(
     color = ProductColor(name = colorName, hex = colorHex)
 )
 
-fun InsoleOrderConfig.toEntity(createdAt: Long = currentEpochMillis()): InsoleOrderConfigEntity =
+fun InsoleOrderConfig.toEntity(
+    createdAt: Long = currentEpochMillis(),
+    status: String = "DRAFT",
+): InsoleOrderConfigEntity =
     InsoleOrderConfigEntity(
         orderId = orderId,
         category = category.name,
-        status = "DRAFT",
+        status = status,
         quantity = quantity.toLong(),
         rightFootJson = json.encodeToString(InsoleFootConfig.serializer(), rightFoot),
         leftFootJson = leftFoot?.let { json.encodeToString(InsoleFootConfig.serializer(), it) },
@@ -311,11 +314,14 @@ fun ProstheticCoverOrderConfigEntity.toDomain(): ProstheticCoverOrderConfig =
         createdAt = createdAt
     )
 
-fun ProstheticCoverOrderConfig.toEntity(): ProstheticCoverOrderConfigEntity =
+fun ProstheticCoverOrderConfig.toEntity(
+    status: String = "DRAFT",
+    createdAt: Long = this.createdAt,
+): ProstheticCoverOrderConfigEntity =
     ProstheticCoverOrderConfigEntity(
         orderId = orderId,
         category = category.name,
-        status = "DRAFT",
+        status = status,
         quantity = quantity.toLong(),
         limbSide = limbSide.name,
         limbLevel = limbLevel.name,

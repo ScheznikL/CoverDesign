@@ -47,3 +47,6 @@ WHERE orderId = :orderId;
 deleteInsoleOrder:
 DELETE FROM InsoleOrderConfigEntity
 WHERE orderId = :orderId;
+
+deleteAllInsoleOrders:
+DELETE FROM InsoleOrderConfigEntity;

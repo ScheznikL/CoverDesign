@@ -4,9 +4,9 @@ package com.example.coverdesign.di
 
 import com.example.coverdesign.data.local.DatabaseDriverFactory
 import com.example.coverdesign.data.remote.client.createHttpClient
+import com.example.coverdesign.data.remote.firestore.OrderCloudDataSource
 import com.example.coverdesign.data.remote.interceptor.InMemoryTokenStorage
 import com.example.coverdesign.data.remote.interceptor.TokenStorage
-import com.example.coverdesign.data.remote.service.AuthApiService
 import com.example.coverdesign.data.remote.service.Model3DApiService
 import com.example.coverdesign.data.remote.service.OrderApiService
 import com.example.coverdesign.data.remote.service.ProductApiService
@@ -27,17 +27,19 @@ import com.example.coverdesign.domain.usecase.ConfigureProductUseCase
 import com.example.coverdesign.domain.usecase.CreateConfigFromProductUseCase
 import com.example.coverdesign.domain.usecase.GenerateModelUseCase
 import com.example.coverdesign.domain.usecase.GenerateProstheticCoverModelUseCase
-import com.example.coverdesign.domain.usecase.SubmitProstheticOrderUseCase
 import com.example.coverdesign.domain.usecase.GetCatalogUseCase
 import com.example.coverdesign.domain.usecase.GetOrderDetailUseCase
 import com.example.coverdesign.domain.usecase.GetOrderListUseCase
 import com.example.coverdesign.domain.usecase.GetRehabDataUseCase
-import com.example.coverdesign.domain.usecase.SubmitRehabSessionUseCase
-import com.example.coverdesign.domain.usecase.PollRehabSessionUseCase
 import com.example.coverdesign.domain.usecase.LinkOrderToAdaptedModelUseCase
+import com.example.coverdesign.domain.usecase.LogoutUseCase
 import com.example.coverdesign.domain.usecase.PollModelStatusUseCase
+import com.example.coverdesign.domain.usecase.PollRehabSessionUseCase
 import com.example.coverdesign.domain.usecase.SaveInsoleOrderLocallyUseCase
 import com.example.coverdesign.domain.usecase.SaveOrderLocallyUseCase
+import com.example.coverdesign.domain.usecase.SubmitProstheticOrderUseCase
+import com.example.coverdesign.domain.usecase.SubmitRehabSessionUseCase
+import com.example.coverdesign.domain.usecase.SyncOrdersUseCase
 import com.example.coverdesign.domain.usecase.UpdateConfigUseCase
 import com.example.coverdesign.domain.usecase.UploadReferencePhotoUseCase
 import com.example.coverdesign.domain.usecase.UploadTextureImageUseCase
@@ -88,15 +90,18 @@ val networkModule = module {
     singleOf(::ProductApiService)
     singleOf(::Model3DApiService)
     singleOf(::OrderApiService)
-    singleOf(::AuthApiService)
     singleOf(::RehabApiService)
 
+    // Firestore data sources (GitLive — defaults to Firebase.firestore)
+    single { OrderCloudDataSource() }
 }
 
 val repositoryModule = module {
     single<ProductRepository> { ProductRepositoryImpl(api = get(), db = get()) }
     single<Model3DRepository> { Model3DRepositoryImpl(api = get(), db = get()) }
-    single<OrderRepository> { OrderRepositoryImpl(api = get(), db = get()) }
+    single<OrderRepository> {
+        OrderRepositoryImpl(api = get(), db = get(), cloud = get(), authRepo = get())
+    }
     single<RehabRepository> { RehabRepositoryImpl(api = get()) }
 //    single<AuthRepository> {
 //        AuthRepositoryImplTest(tokenStorage = get())
@@ -142,6 +147,10 @@ val useCaseModule = module {
     factoryOf(::GetOrderListUseCase)
     factory { GetOrderDetailUseCase(orderRepo = get(), model3DRepo = get()) }
 
+    // Order sync / logout
+    factoryOf(::SyncOrdersUseCase)
+    factory { LogoutUseCase(orderRepo = get(), authRepo = get()) }
+
     // Rehabilitation
     factoryOf(::GetRehabDataUseCase)
     factoryOf(::SubmitRehabSessionUseCase)
@@ -175,9 +184,17 @@ val viewModelModule = module {
     viewModel {
         OrderSummaryViewModel(orderRepo = get(), getOrderDetail = get())
     }
-    viewModel { OrderListViewModel(getOrderList = get()) }
-    viewModel { HomeViewModel(getOrderList = get(), getRehabData = get(), authRepo = get()) }
-    viewModel { AuthViewModel(get(), get()) }
+    viewModel { OrderListViewModel(getOrderList = get(), syncOrders = get()) }
+    viewModel {
+        HomeViewModel(
+            getOrderList = get(),
+            getRehabData = get(),
+            authRepo = get(),
+            logout = get(),
+            syncOrders = get()
+        )
+    }
+    viewModel { AuthViewModel(get(), get(), get()) }
     viewModel { RehabViewModel(getRehabData = get(), authRepo = get()) }
     viewModel { RecommendationsViewModel(getRehabData = get(), authRepo = get()) }
     viewModel { SensorCameraViewModel(submitRehabSession = get(), pollRehabSession = get(), authRepo = get()) }

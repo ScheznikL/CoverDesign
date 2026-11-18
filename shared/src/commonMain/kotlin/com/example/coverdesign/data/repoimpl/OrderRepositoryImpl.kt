@@ -7,6 +7,8 @@ import com.example.coverdesign.data.dto.toDomain
 import com.example.coverdesign.data.dto.toDto
 import com.example.coverdesign.data.local.toDomain
 import com.example.coverdesign.data.local.toEntity
+import com.example.coverdesign.data.remote.firestore.CloudOrder
+import com.example.coverdesign.data.remote.firestore.OrderCloudDataSource
 import com.example.coverdesign.data.remote.service.OrderApiService
 import com.example.coverdesign.db.AppDatabase
 import com.example.coverdesign.domain.model.InsoleOrderConfig
@@ -17,6 +19,7 @@ import com.example.coverdesign.domain.model.OrderId
 import com.example.coverdesign.domain.model.OrderListItem
 import com.example.coverdesign.domain.model.OrderStatus
 import com.example.coverdesign.domain.model.ProstheticCoverOrderConfig
+import com.example.coverdesign.domain.repo.FireAuthRepository
 import com.example.coverdesign.domain.repo.OrderRepository
 import com.example.coverdesign.domain.util.Resource
 import com.example.coverdesign.domain.util.currentEpochMillis
@@ -28,7 +31,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 class OrderRepositoryImpl(
-    private val api: OrderApiService, private val db: AppDatabase
+    private val api: OrderApiService,
+    private val db: AppDatabase,
+    private val cloud: OrderCloudDataSource,
+    private val authRepo: FireAuthRepository,
 ) : OrderRepository {
 
     // ── Catalog-based order flow ───────────────────────────────────────────────
@@ -222,8 +228,46 @@ class OrderRepositoryImpl(
             }
         }
 
-    override suspend fun refreshOrders(): Flow<List<OrderListItem>> {
-        TODO("Not yet implemented")
+    // ── Remote sync (Firestore, per-user) ──────────────────────────────────────
+
+    override suspend fun syncOrdersFromRemote(): Resource<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val uid = authRepo.getCurrentUserId()
+                ?: return@withContext Resource.Error("No signed-in user to sync orders for")
+            cloud.getOrdersForUser(uid).forEach { order ->
+                when (order) {
+                    is CloudOrder.Insole -> db.insoleOrderConfigQueries.insertInsoleOrder(
+                        order.config.toEntity(createdAt = order.createdAt, status = order.status.name)
+                    )
+
+                    is CloudOrder.Cover -> db.prostheticCoverOrderConfigQueries.insertProstheticCoverOrder(
+                        order.config.toEntity(status = order.status.name, createdAt = order.createdAt)
+                    )
+                }
+            }
+            println("[ORDERS] syncOrdersFromRemote() Success")
+
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            println("[ORDERS] ${e.message}")
+            Resource.Error("Failed to sync orders: ${e.message}", e)
+        }
+    }
+
+    override suspend fun clearLocalOrders(): Resource<Unit> = withContext(Dispatchers.IO) {
+        try {
+            db.transaction {
+                // Child-first so FK constraints hold regardless of PRAGMA foreign_keys.
+                db.orderQueries.deleteAllOrders()
+                db.adaptedModel3DQueries.deleteAllAdaptedModels()
+                db.prostheticCoverOrderConfigQueries.deleteAllProstheticCoverOrders()
+                db.insoleOrderConfigQueries.deleteAllInsoleOrders()
+                db.productConfigQueries.deleteAllConfigs()
+            }
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error("Failed to clear local orders: ${e.message}", e)
+        }
     }
 
     // ── Combined list ─────────────────────────────────────────────────────────

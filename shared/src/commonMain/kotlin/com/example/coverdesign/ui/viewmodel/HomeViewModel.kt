@@ -6,6 +6,8 @@ import com.example.coverdesign.domain.model.OrderListItem
 import com.example.coverdesign.domain.repo.FireAuthRepository
 import com.example.coverdesign.domain.usecase.GetOrderListUseCase
 import com.example.coverdesign.domain.usecase.GetRehabDataUseCase
+import com.example.coverdesign.domain.usecase.LogoutUseCase
+import com.example.coverdesign.domain.usecase.SyncOrdersUseCase
 import com.example.coverdesign.domain.util.Resource
 import com.example.coverdesign.domain.util.currentEpochMillis
 import com.example.coverdesign.ui.viewmodel.base.BaseViewModel
@@ -16,7 +18,9 @@ import kotlinx.coroutines.launch
 class HomeViewModel(
     private val getOrderList : GetOrderListUseCase,
     private val getRehabData : GetRehabDataUseCase,
-    private val authRepo     : FireAuthRepository
+    private val authRepo     : FireAuthRepository,
+    private val logout       : LogoutUseCase,
+    private val syncOrders   : SyncOrdersUseCase
 ) : BaseViewModel<HomeUiState, HomeUiEvent>() {
 
     override fun initialState() = HomeUiState()
@@ -28,6 +32,7 @@ class HomeViewModel(
 
     init {
         loadRecentOrders()
+        refreshOrders()
         loadUserState()
         loadRehabData()
     }
@@ -43,7 +48,22 @@ class HomeViewModel(
             is HomeAction.OrderInsoles          -> sendEvent(HomeUiEvent.NavigateToInsoleOrder)
             is HomeAction.StartRehabScan        -> sendEvent(HomeUiEvent.NavigateToSensorCamera)
             is HomeAction.DismissWelcome        -> dismissWelcome()
-            is HomeAction.Logout            -> logout()
+            is HomeAction.Logout            -> handleLogout()
+            is HomeAction.RetryOrderSync        -> refreshOrders()
+        }
+    }
+
+    /** Reloads orders from Firestore on open; failure surfaces via [HomeUiState.ordersSyncStatus]. */
+    private fun refreshOrders() {
+        viewModelScope.launch {
+            setState { copy(ordersSyncStatus = OrderSyncStatus.SYNCING) }
+            val result = syncOrders()
+            setState {
+                copy(
+                    ordersSyncStatus = if (result is Resource.Error) OrderSyncStatus.FAILED
+                    else OrderSyncStatus.IDLE
+                )
+            }
         }
     }
 
@@ -107,8 +127,8 @@ class HomeViewModel(
         setState { copy(isNewUser = false) }
     }
 
-    private fun logout() {
-        viewModelScope.launch { authRepo.signOut() }
+    private fun handleLogout() {
+        viewModelScope.launch { logout() }
     }
 
     companion object {
@@ -124,7 +144,8 @@ data class HomeUiState(
     val hasInsoles    : Boolean           = false,
     val isNewUser     : Boolean           = false,
     val isLoading     : Boolean           = false,
-    val isLoadingRehab: Boolean           = false
+    val isLoadingRehab: Boolean           = false,
+    val ordersSyncStatus: OrderSyncStatus = OrderSyncStatus.IDLE
 ) : UiState
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -150,5 +171,6 @@ sealed class HomeAction {
     object StartRehabScan        : HomeAction()
     object DismissWelcome        : HomeAction()
     object Logout            : HomeAction()
+    object RetryOrderSync        : HomeAction()
     data class OpenOrder(val orderId: String) : HomeAction()
 }

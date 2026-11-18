@@ -46,6 +46,9 @@ SELECT * FROM ProductConfigEntity WHERE id = :id;
 deleteConfig:
 DELETE FROM ProductConfigEntity WHERE id = :id;
 
+deleteAllConfigs:
+DELETE FROM ProductConfigEntity;
+
 selectConfigsByProductId:
 SELECT * FROM ProductConfigEntity
 WHERE productId = :productId

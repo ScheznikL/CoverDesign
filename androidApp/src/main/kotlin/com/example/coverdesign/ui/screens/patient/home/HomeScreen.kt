@@ -84,6 +84,7 @@ import com.example.coverdesign.domain.model.OrderListItem
 import com.example.coverdesign.domain.model.OrderStatus
 import com.example.coverdesign.ui.components.EventHandler
 import com.example.coverdesign.ui.components.OrderStatusChip
+import com.example.coverdesign.ui.components.OrdersSyncErrorBanner
 import com.example.coverdesign.ui.theme.AppTheme
 import com.example.coverdesign.ui.theme.ChartEndRed
 import com.example.coverdesign.ui.theme.ChartStartGreen
@@ -100,6 +101,7 @@ import com.example.coverdesign.ui.viewmodel.HomeAction
 import com.example.coverdesign.ui.viewmodel.HomeUiEvent
 import com.example.coverdesign.ui.viewmodel.HomeUiState
 import com.example.coverdesign.ui.viewmodel.HomeViewModel
+import com.example.coverdesign.ui.viewmodel.OrderSyncStatus
 import com.example.coverdesign.ui.viewmodel.RehabMockData
 import org.koin.compose.viewmodel.koinViewModel
 import java.text.SimpleDateFormat
@@ -201,6 +203,13 @@ internal fun HomeContent(
                 title = "Recent Orders",
                 action = "See all",
                 onAction = { onAction(HomeAction.SeeAllOrders) })
+
+            if (state.ordersSyncStatus == OrderSyncStatus.FAILED) {
+                OrdersSyncErrorBanner(
+                    onRetry  = { onAction(HomeAction.RetryOrderSync) },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
 
             if (state.recentOrders.isEmpty()) {
                 EmptyOrdersCard(

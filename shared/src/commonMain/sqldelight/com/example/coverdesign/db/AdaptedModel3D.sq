@@ -36,3 +36,6 @@ updateAdaptedStatus:
 UPDATE AdaptedModel3DEntity
 SET status = :status
 WHERE id = :id;
+
+deleteAllAdaptedModels:
+DELETE FROM AdaptedModel3DEntity;
