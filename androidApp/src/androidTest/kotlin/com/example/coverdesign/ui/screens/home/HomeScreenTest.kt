@@ -3,14 +3,20 @@ package com.example.coverdesign.ui.screens.home
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import com.example.coverdesign.domain.model.OrderCategory
+import com.example.coverdesign.domain.model.BodyPosition
+import com.example.coverdesign.domain.model.GaitAnalysisResult
+import com.example.coverdesign.domain.model.GaitSession as ServerGaitSession
 import com.example.coverdesign.domain.model.OrderListItem
 import com.example.coverdesign.domain.model.OrderStatus
 import com.example.coverdesign.ui.screens.patient.home.HomeContent
 import com.example.coverdesign.ui.viewmodel.HomeAction
 import com.example.coverdesign.ui.viewmodel.HomeUiState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -37,7 +43,7 @@ class HomeScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithText("Create new order").performClick()
+        composeTestRule.onNodeWithText("Create new order").performScrollTo().performClick()
         assertEquals(HomeAction.NewOrder, actionReceived)
     }
 
@@ -50,11 +56,11 @@ class HomeScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithText("No orders yet").assertIsDisplayed()
+        composeTestRule.onNodeWithText("No orders yet").performScrollTo().assertIsDisplayed()
     }
 
     @Test
-    fun testEmptyRehabState() {
+    fun testEmptyGaitState() {
         composeTestRule.setContent {
             HomeContent(
                 state = HomeUiState(rehabSessions = emptyList()),
@@ -62,7 +68,7 @@ class HomeScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithText("No sessions recorded yet").assertIsDisplayed()
+        composeTestRule.onNodeWithText("No gait measurements yet").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -76,7 +82,7 @@ class HomeScreenTest {
         }
 
         // RecentOrderCard shows category.label — PROSTHETIC_COVER → "Prosthetic Cover"
-        composeTestRule.onNodeWithText("Prosthetic Cover").performClick()
+        composeTestRule.onNodeWithText("Prosthetic Cover").performScrollTo().performClick()
         assertEquals(HomeAction.OpenOrder("order_1"), actionReceived)
     }
 
@@ -90,7 +96,7 @@ class HomeScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithText("See all").performClick()
+        composeTestRule.onNodeWithText("See all").performScrollTo().performClick()
         assertEquals(HomeAction.SeeAllOrders, actionReceived)
     }
 
@@ -104,7 +110,7 @@ class HomeScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithText("View History").performClick()
+        composeTestRule.onNodeWithTag("home-server-rehab-history").performScrollTo().performClick()
         assertEquals(HomeAction.OpenRehabHistory, actionReceived)
     }
 
@@ -161,5 +167,77 @@ class HomeScreenTest {
         // Starting the tour dismisses the coach-mark and shows the first tour step.
         assertEquals(HomeAction.DismissWelcome, actionReceived)
         composeTestRule.onNodeWithText("Create an order").assertIsDisplayed()
+    }
+
+    @Test
+    fun testRecommendationsClick() {
+        var actionReceived: HomeAction? = null
+        composeTestRule.setContent {
+            HomeContent(state = HomeUiState(), onAction = { actionReceived = it })
+        }
+        composeTestRule.onNodeWithText("View Recommendations").performScrollTo().performClick()
+        assertEquals(HomeAction.OpenRecommendations, actionReceived)
+    }
+
+    @Test
+    fun testGaitHistoryIsSeparateFromServerRehabHistory() {
+        var gaitHistoryOpened = false
+        var actionReceived: HomeAction? = null
+        composeTestRule.setContent {
+            HomeContent(state = HomeUiState(), onAction = { actionReceived = it },
+                onGaitHistory = { gaitHistoryOpened = true })
+        }
+        composeTestRule.onNodeWithTag("home-gait-view-history").performScrollTo().performClick()
+        assertTrue(gaitHistoryOpened)
+        assertEquals(null, actionReceived)
+        composeTestRule.onNodeWithTag("home-server-rehab-history").performScrollTo().performClick()
+        assertEquals(HomeAction.OpenRehabHistory, actionReceived)
+    }
+
+    @Test
+    fun testServerEmptyStatePreservesScanAndInsoleActions() {
+        var actionReceived: HomeAction? = null
+        composeTestRule.setContent {
+            HomeContent(state = HomeUiState(rehabSessions = emptyList()), onAction = { actionReceived = it })
+        }
+        composeTestRule.onNodeWithText("No scan recorded").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Make a scan").performScrollTo().performClick()
+        assertEquals(HomeAction.StartRehabScan, actionReceived)
+        composeTestRule.onNodeWithText("No insoles connected").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Order Insoles").performScrollTo().performClick()
+        assertEquals(HomeAction.OrderInsoles, actionReceived)
+    }
+
+    @Test
+    fun testServerLoadingStateDoesNotShowAnInventedSession() {
+        composeTestRule.setContent {
+            HomeContent(state = HomeUiState(isLoadingRehab = true), onAction = {})
+        }
+        composeTestRule.onNodeWithTag("home-server-rehab-loading").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Loading rehabilitation data…").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("home-server-rehab-summary").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Posture").assertDoesNotExist()
+    }
+
+    @Test
+    fun testServerSessionValuesStaySeparateFromLocalGaitAngles() {
+        val serverSession = ServerGaitSession(
+            id = "server-session", patientUid = "test-patient", timestamp = 1_000,
+            durationSeconds = 8,
+            gaitAnalysis = GaitAnalysisResult(
+                postureScore = 61f, balanceScore = 72f, symmetryScore = 83f, scoliosisScore = 64f,
+                positionSeries = listOf(BodyPosition(0, 1f, -1f), BodyPosition(100, 2f, -2f)),
+                abnormalities = emptyList()),
+            pressureData = null)
+        composeTestRule.setContent {
+            HomeContent(state = HomeUiState(rehabSessions = listOf(serverSession)), onAction = {})
+        }
+        composeTestRule.onNodeWithText("No gait measurements yet").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("home-gait-FRONT-SHOULDERS-angle").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("home-server-rehab-summary").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("61%").assertIsDisplayed()
+        composeTestRule.onNodeWithText("72%").assertIsDisplayed()
+        composeTestRule.onNodeWithText("83%").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Body Deviation").assertExists()
     }
 }

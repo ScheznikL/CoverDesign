@@ -680,7 +680,7 @@ private fun ModelMissingCard(message: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun CameraPermissionGate(onRequest: () -> Unit, modifier: Modifier = Modifier) {
+internal fun CameraPermissionGate(onRequest: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier            = modifier.padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally

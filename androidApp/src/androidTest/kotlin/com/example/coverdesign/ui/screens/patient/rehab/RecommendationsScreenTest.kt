@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.example.coverdesign.ui.viewmodel.RecommendationsAction
 import com.example.coverdesign.ui.viewmodel.RecommendationsUiState
 import com.example.coverdesign.ui.viewmodel.RehabMockData
@@ -93,7 +94,7 @@ class RecommendationsScreenTest {
         composeTestRule.setContent {
             RecommendationsContent(state = stateWithData(), onAction = {})
         }
-        composeTestRule.onNodeWithText("Insole-based").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Insole-based").performScrollTo().assertIsDisplayed()
     }
 
 //    @Test

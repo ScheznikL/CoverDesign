@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.coverdesign.domain.model.AppUser
 import com.example.coverdesign.domain.model.UserRole
@@ -48,9 +49,9 @@ class ProfileScreenTest {
 
         // "Settings" appears as both a section header and a row label, so skip it;
         // the other three row labels are unique
-        composeTestRule.onNodeWithText("Notifications").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Help & Support").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Privacy Policy").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Notifications").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Help & Support").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Privacy Policy").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -60,9 +61,7 @@ class ProfileScreenTest {
             ProfileContent(appUser = null, onSignOut = { signOutCalled = true })
         }
 
-        composeTestRule.onNodeWithText("Sign Out").performClick()
-        composeTestRule.waitForIdle()
-
-        assertTrue(signOutCalled)
+        composeTestRule.onNodeWithText("Sign Out").performScrollTo().assertIsDisplayed().performClick()
+        composeTestRule.runOnIdle { assertTrue(signOutCalled) }
     }
 }

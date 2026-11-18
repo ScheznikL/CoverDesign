@@ -4,7 +4,11 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
-    alias(libs.plugins.googleGmsGoogleServices)
+    alias(libs.plugins.googleGmsGoogleServices) apply false
+}
+
+if (!providers.gradleProperty("compileWithoutFirebase").map(String::toBoolean).getOrElse(false)) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 kotlin {
@@ -43,6 +47,7 @@ dependencies {
     //implementation(libs.firebase.storage.ktx)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.storage)
+    implementation(libs.firebase.firestore)
 //    implementation(libs.firebase.firestore)
     //implementation(libs.firebase.firestore)
 
@@ -73,10 +78,10 @@ android {
         applicationId = "com.example.coverdesign"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 14
+        versionName = "1.3.1"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.example.coverdesign.gait.GaitTestRunner"
     }
     packaging {
         resources {

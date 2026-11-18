@@ -27,6 +27,9 @@ actual class GoogleAuthenticator(
     private val webClientId  : String   // injected via Koin
 ) {
     actual suspend fun getIdToken(context: Any): String {
+        check(webClientId.isNotBlank()) {
+            "Google sign-in is not configured for this Firebase project. Use email and password."
+        }
         context as Context
         val credentialManager = CredentialManager.create(context)
 
