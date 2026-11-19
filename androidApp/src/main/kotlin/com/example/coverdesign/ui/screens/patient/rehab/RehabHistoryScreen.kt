@@ -61,7 +61,6 @@ import com.example.coverdesign.domain.model.CopPoint
 import com.example.coverdesign.domain.model.FootPressureMap
 import com.example.coverdesign.domain.model.GaitSession
 import com.example.coverdesign.ui.components.EventHandler
-import com.example.coverdesign.ui.components.DemoRehabilitationNotice
 import com.example.coverdesign.ui.theme.AppTheme
 import com.example.coverdesign.ui.theme.AccentAmber
 import com.example.coverdesign.ui.theme.AccentCoral
@@ -132,9 +131,6 @@ internal fun RehabHistoryContent(
                 horizontal = 16.dp, vertical = 12.dp
             )
         ) {
-            item {
-                DemoRehabilitationNotice(Modifier.fillMaxWidth())
-            }
             // ── Score trend chart ─────────────────────────────────────────
             item {
                 ScoreTrendCard(sessions = state.sessions)

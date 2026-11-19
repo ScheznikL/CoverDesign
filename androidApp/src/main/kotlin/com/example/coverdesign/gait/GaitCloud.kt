@@ -286,6 +286,45 @@ internal class GaitCloudRepository(context: Context,
                 .map { readFullSession(it) }
         }
 
+    /**
+     * Care-linked read: lists a patient's reports directly. Authorization is enforced by the
+     * Firestore rules' `gaitCareLinkedDoctor` (a `care_links` entry + the patient's consent flag),
+     * so no `gaitShares` grant listener is needed. A denied read surfaces as an error/empty list.
+     */
+    fun careReports(patientUid: String): Flow<List<GaitCloudReport>> = callbackFlow {
+        require(validDocumentId(patientUid))
+        val uid = owner()
+        val account = FirebaseAuth.AuthStateListener { if (it.currentUser?.uid != uid) { trySend(emptyList()); close() } }
+        auth.addAuthStateListener(account)
+        val listener = db.collection("gaitReports").document(patientUid).collection("sessions")
+            .addSnapshotListener(MetadataChanges.INCLUDE) { records, failure ->
+                if (auth.currentUser?.uid != uid) { trySend(emptyList()); close() }
+                else if (failure != null) { trySend(emptyList()); close(failure) }
+                else if (records != null && !records.metadata.isFromCache && !records.metadata.hasPendingWrites()) {
+                    val parsed = runCatching { records.documents.map { doc ->
+                        GaitCloudReport.fromMap(requireNotNull(doc.data), patientUid, doc.id)
+                    }.sortedByDescending { it.createdAt } }
+                    parsed.onSuccess { trySend(it) }.onFailure { trySend(emptyList()); close(it) }
+                }
+            }
+        awaitClose { listener.remove(); auth.removeAuthStateListener(account) }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun careSession(patientUid: String, sessionId: String): Flow<GaitSession?> {
+        require(validDocumentId(sessionId))
+        return careReports(patientUid).mapLatest { reports ->
+            reports.firstOrNull { it.sessionId == sessionId && it.detailManifest != null }?.let { readFullSession(it) }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun careSessionHistory(patientUid: String, comparisonGroupId: String): Flow<List<GaitSession>> =
+        careReports(patientUid).mapLatest { reports ->
+            reports.filter { it.comparisonGroupId == comparisonGroupId && it.detailManifest != null }
+                .map { readFullSession(it) }
+        }
+
     private suspend fun readFullSession(report: GaitCloudReport): GaitSession {
         val uid = owner()
         val manifest = requireNotNull(report.detailManifest)

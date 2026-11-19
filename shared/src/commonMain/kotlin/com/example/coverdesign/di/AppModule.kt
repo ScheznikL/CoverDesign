@@ -4,19 +4,23 @@ package com.example.coverdesign.di
 
 import com.example.coverdesign.data.local.DatabaseDriverFactory
 import com.example.coverdesign.data.remote.client.createHttpClient
+import com.example.coverdesign.data.remote.firestore.CareCloudDataSource
 import com.example.coverdesign.data.remote.firestore.OrderCloudDataSource
 import com.example.coverdesign.data.remote.interceptor.InMemoryTokenStorage
 import com.example.coverdesign.data.remote.interceptor.TokenStorage
+import com.example.coverdesign.data.remote.service.CareApiService
 import com.example.coverdesign.data.remote.service.Model3DApiService
 import com.example.coverdesign.data.remote.service.OrderApiService
 import com.example.coverdesign.data.remote.service.ProductApiService
 import com.example.coverdesign.data.remote.service.RehabApiService
+import com.example.coverdesign.data.repoimpl.CareRepositoryImpl
 import com.example.coverdesign.data.repoimpl.FireAuthRepositoryImpl
 import com.example.coverdesign.data.repoimpl.Model3DRepositoryImpl
 import com.example.coverdesign.data.repoimpl.OrderRepositoryImpl
 import com.example.coverdesign.data.repoimpl.ProductRepositoryImpl
 import com.example.coverdesign.data.repoimpl.RehabRepositoryImpl
 import com.example.coverdesign.db.AppDatabase
+import com.example.coverdesign.domain.repo.CareRepository
 import com.example.coverdesign.domain.repo.FireAuthRepository
 import com.example.coverdesign.domain.repo.Model3DRepository
 import com.example.coverdesign.domain.repo.OrderRepository
@@ -29,6 +33,7 @@ import com.example.coverdesign.domain.usecase.GenerateModelUseCase
 import com.example.coverdesign.domain.usecase.GenerateProstheticCoverModelUseCase
 import com.example.coverdesign.domain.usecase.GetCatalogUseCase
 import com.example.coverdesign.domain.usecase.GetOrderDetailUseCase
+import com.example.coverdesign.domain.usecase.GetDoctorPatientsUseCase
 import com.example.coverdesign.domain.usecase.GetOrderListUseCase
 import com.example.coverdesign.domain.usecase.GetRehabDataUseCase
 import com.example.coverdesign.domain.usecase.LinkOrderToAdaptedModelUseCase
@@ -38,9 +43,11 @@ import com.example.coverdesign.domain.usecase.PollRehabSessionUseCase
 import com.example.coverdesign.domain.usecase.SaveInsoleOrderLocallyUseCase
 import com.example.coverdesign.domain.usecase.SaveOrderLocallyUseCase
 import com.example.coverdesign.domain.usecase.SubmitProstheticOrderUseCase
+import com.example.coverdesign.domain.usecase.SubmitRecommendationUseCase
 import com.example.coverdesign.domain.usecase.SubmitRehabSessionUseCase
 import com.example.coverdesign.domain.usecase.SyncOrdersUseCase
 import com.example.coverdesign.domain.usecase.UpdateConfigUseCase
+import com.example.coverdesign.domain.usecase.UpsertGaitProfileUseCase
 import com.example.coverdesign.domain.usecase.UploadReferencePhotoUseCase
 import com.example.coverdesign.domain.usecase.UploadTextureImageUseCase
 import com.example.coverdesign.domain.validator.MeasurementValidator
@@ -57,6 +64,7 @@ import com.example.coverdesign.ui.viewmodel.ProductConfigViewModel
 import com.example.coverdesign.ui.viewmodel.RecommendationsViewModel
 import com.example.coverdesign.ui.viewmodel.RehabViewModel
 import com.example.coverdesign.ui.viewmodel.SensorCameraViewModel
+import com.example.coverdesign.ui.viewmodel.WriteRecommendationViewModel
 import org.koin.core.module.dsl.factoryOf
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.module.dsl.viewModel
@@ -91,9 +99,11 @@ val networkModule = module {
     singleOf(::Model3DApiService)
     singleOf(::OrderApiService)
     singleOf(::RehabApiService)
+    singleOf(::CareApiService)
 
     // Firestore data sources (GitLive — defaults to Firebase.firestore)
     single { OrderCloudDataSource() }
+    single { CareCloudDataSource() }
 }
 
 val repositoryModule = module {
@@ -103,6 +113,7 @@ val repositoryModule = module {
         OrderRepositoryImpl(api = get(), db = get(), cloud = get(), authRepo = get())
     }
     single<RehabRepository> { RehabRepositoryImpl(api = get()) }
+    single<CareRepository> { CareRepositoryImpl(api = get(), cloud = get(), authRepo = get()) }
 //    single<AuthRepository> {
 //        AuthRepositoryImplTest(tokenStorage = get())
 //    }
@@ -153,7 +164,10 @@ val useCaseModule = module {
 
     // Rehabilitation
     factoryOf(::GetRehabDataUseCase)
+    factoryOf(::GetDoctorPatientsUseCase)
+    factoryOf(::SubmitRecommendationUseCase)
     factoryOf(::SubmitRehabSessionUseCase)
+    factoryOf(::UpsertGaitProfileUseCase)
     factory { PollRehabSessionUseCase(get()) }
 
     // shared validator
@@ -199,8 +213,11 @@ val viewModelModule = module {
     viewModel { RecommendationsViewModel(getRehabData = get(), authRepo = get()) }
     viewModel { SensorCameraViewModel(submitRehabSession = get(), pollRehabSession = get(), authRepo = get()) }
     viewModel { AppViewModel(authRepo = get()) }
-    viewModel { ClinicianHomeViewModel(authRepo = get()) }
-    viewModel { ClinicianPatientsViewModel(authRepo = get()) }
+    viewModel { ClinicianHomeViewModel(authRepo = get(), getDoctorPatients = get()) }
+    viewModel { ClinicianPatientsViewModel(authRepo = get(), getDoctorPatients = get()) }
+    viewModel { (patientId: String) ->
+        WriteRecommendationViewModel(patientId = patientId, getDoctorPatients = get(), submitRecommendation = get())
+    }
 
 }
 

@@ -21,6 +21,9 @@ interface FireAuthRepository {
     suspend fun getUserProfile(uid: String): Resource<AppUser>
     suspend fun createUserProfile(user: AppUser): Resource<Unit>
 
+    /** Updates the signed-in patient's gait-sharing consent flag on their `users/{uid}` profile. */
+    suspend fun setGaitSharingConsent(enabled: Boolean): Resource<Unit>
+
 
     /** Returns the current user's uid, or null if not signed in. */
     fun getCurrentUserId(): String?

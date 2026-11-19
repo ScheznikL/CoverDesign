@@ -2,6 +2,7 @@ package com.example.coverdesign.ui.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import com.example.coverdesign.domain.repo.FireAuthRepository
+import com.example.coverdesign.domain.usecase.GetDoctorPatientsUseCase
 import com.example.coverdesign.domain.util.Resource
 import com.example.coverdesign.ui.viewmodel.base.BaseViewModel
 import com.example.coverdesign.ui.viewmodel.base.UiEvent
@@ -44,14 +45,15 @@ data class ClinicianPatientsUiState(
 sealed class ClinicianPatientsUiEvent : UiEvent
 
 class ClinicianPatientsViewModel(
-    private val authRepo: FireAuthRepository
+    private val authRepo: FireAuthRepository,
+    private val getDoctorPatients: GetDoctorPatientsUseCase,
 ) : BaseViewModel<ClinicianPatientsUiState, ClinicianPatientsUiEvent>() {
 
     override fun initialState() = ClinicianPatientsUiState()
 
     init {
         loadDoctorInfo()
-        // TODO: fetch patient list from backend (shared with ClinicianHomeViewModel)
+        loadPatients()
     }
 
     fun onSearchChange(query: String) = setState { copy(searchQuery = query) }
@@ -64,6 +66,18 @@ class ClinicianPatientsViewModel(
             when (val result = authRepo.getUserProfile(uid)) {
                 is Resource.Success -> setState { copy(doctorName = result.data.displayName) }
                 else -> {}
+            }
+        }
+    }
+
+    private fun loadPatients() {
+        viewModelScope.launch {
+            setState { copy(isLoading = true) }
+            when (val result = getDoctorPatients()) {
+                is Resource.Success ->
+                    setState { copy(patients = result.data.map { it.toSummary() }, isLoading = false) }
+
+                else -> setState { copy(isLoading = false) }
             }
         }
     }

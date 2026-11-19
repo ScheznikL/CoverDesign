@@ -50,7 +50,6 @@ import com.example.coverdesign.domain.model.FootPressureMap
 import com.example.coverdesign.domain.model.GaitAnalysisResult
 import com.example.coverdesign.domain.model.RecommendationTag
 import com.example.coverdesign.ui.components.EventHandler
-import com.example.coverdesign.ui.components.DemoRehabilitationNotice
 import com.example.coverdesign.ui.theme.AppTheme
 import com.example.coverdesign.ui.theme.NeutralBackground
 import com.example.coverdesign.ui.theme.NeutralText
@@ -108,7 +107,6 @@ internal fun RecommendationsContent(
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            DemoRehabilitationNotice(Modifier.fillMaxWidth())
             PatientInfoRow(
                 patientName = state.patientName,
                 hasUnread = state.recommendations.isNotEmpty()

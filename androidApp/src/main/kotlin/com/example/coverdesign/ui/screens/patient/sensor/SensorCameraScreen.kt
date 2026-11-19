@@ -160,7 +160,15 @@ fun SensorCameraScreen(
                     hasAudio = audioGranted,
                     submitStatus = submitState.status,
                     submitError = submitState.errorMessage,
-                    onVideoUploaded = viewModel::submitVideo,
+                    // SCAN records a single MediaPipe-pose video; views are not distinguished here.
+                    onVideoUploaded = { path, duration ->
+                        viewModel.submitVideo(
+                            videoPath = path,
+                            durationSeconds = duration,
+                            measurementMethod = "POSE",
+                            acquisitionSource = "VIDEO"
+                        )
+                    },
                     onDismissSubmit = viewModel::reset
                 )
             } else {

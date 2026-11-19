@@ -34,10 +34,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.coverdesign.ui.viewmodel.WriteRecommendationViewModel
+import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.parameter.parametersOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,16 +74,40 @@ enum class RecommendationType {
 data class PatientRecommendationData(
     val patientName: String,
     val treatmentType: String,
-    val lastUpdated: String,
-    val kyphosisCoeff: Float,
-    val asymmetryCoeff: Float,
-    val pressureNote: String,
-    val gaitPattern: String
+    // Optional: gait metrics aren't part of care_links. Absent → the summary section is hidden
+    // rather than showing fabricated/placeholder numbers.
+    val lastUpdated: String = "",
+    val kyphosisCoeff: Float? = null,
+    val asymmetryCoeff: Float? = null,
+    val pressureNote: String? = null,
+    val gaitPattern: String? = null
 ) {
     val initials: String get() = patientName.split(" ")
         .take(2)
         .mapNotNull { it.firstOrNull()?.uppercaseChar() }
         .joinToString("")
+}
+
+/** VM-backed entry: loads the patient from the care roster and posts to the server on send. */
+@Composable
+fun WriteRecommendationScreen(
+    patientId: String,
+    onBack: () -> Unit,
+    viewModel: WriteRecommendationViewModel = koinViewModel { parametersOf(patientId) }
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(state.sent) { if (state.sent) onBack() }
+    WriteRecommendationScreen(
+        patientData = PatientRecommendationData(
+            patientName = state.patientName.ifBlank { "Patient" },
+            treatmentType = state.treatmentType
+        ),
+        onBack = onBack,
+        onSend = { text, type ->
+            val tag = if (type == RecommendationType.Insole) "insole_based" else "photogrammetric"
+            viewModel.submit(text, tag)
+        }
+    )
 }
 
 @Composable
@@ -233,11 +262,13 @@ private fun PatientInfoCard(patientData: PatientRecommendationData) {
                         fontWeight = FontWeight.Bold,
                         color = NeutralText
                     )
-                    Text(
-                        text = patientData.lastUpdated,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = NeutralTextTertiary
-                    )
+                    if (patientData.lastUpdated.isNotBlank()) {
+                        Text(
+                            text = patientData.lastUpdated,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = NeutralTextTertiary
+                        )
+                    }
                 }
                 Text(
                     text = patientData.treatmentType,
@@ -253,6 +284,10 @@ private fun PatientInfoCard(patientData: PatientRecommendationData) {
 
 @Composable
 private fun DataSummarySection(patientData: PatientRecommendationData) {
+    val hasAsymmetry = patientData.kyphosisCoeff != null || patientData.asymmetryCoeff != null
+    val hasInsole = !patientData.pressureNote.isNullOrBlank() || !patientData.gaitPattern.isNullOrBlank()
+    // No fabricated data: only shown when the patient actually has measured values.
+    if (!hasAsymmetry && !hasInsole) return
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = "RECEIVED DATA SUMMARY",
@@ -264,24 +299,28 @@ private fun DataSummarySection(patientData: PatientRecommendationData) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AsymmetryCard(
-                kyphosisCoeff = patientData.kyphosisCoeff,
-                asymmetryCoeff = patientData.asymmetryCoeff,
-                modifier = Modifier.weight(1f)
-            )
-            InsoleCard(
-                pressureNote = patientData.pressureNote,
-                gaitPattern = patientData.gaitPattern,
-                modifier = Modifier.weight(1f)
-            )
+            if (hasAsymmetry) {
+                AsymmetryCard(
+                    kyphosisCoeff = patientData.kyphosisCoeff,
+                    asymmetryCoeff = patientData.asymmetryCoeff,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (hasInsole) {
+                InsoleCard(
+                    pressureNote = patientData.pressureNote,
+                    gaitPattern = patientData.gaitPattern,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun AsymmetryCard(
-    kyphosisCoeff: Float,
-    asymmetryCoeff: Float,
+    kyphosisCoeff: Float?,
+    asymmetryCoeff: Float?,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -314,8 +353,8 @@ private fun AsymmetryCard(
                 )
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                MetricRow(label = "Kyphosis Coeff.", value = "%.1f°".format(kyphosisCoeff))
-                MetricRow(label = "Asymmetry Coeff.", value = "%.2f".format(asymmetryCoeff))
+                kyphosisCoeff?.let { MetricRow(label = "Kyphosis Coeff.", value = "%.1f°".format(it)) }
+                asymmetryCoeff?.let { MetricRow(label = "Asymmetry Coeff.", value = "%.2f".format(it)) }
             }
             StatusBadge(
                 label = "Needs attention",
@@ -329,8 +368,8 @@ private fun AsymmetryCard(
 
 @Composable
 private fun InsoleCard(
-    pressureNote: String,
-    gaitPattern: String,
+    pressureNote: String?,
+    gaitPattern: String?,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -363,8 +402,8 @@ private fun InsoleCard(
                 )
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                InsoleMetricItem(label = "Pressure Distribution", value = pressureNote)
-                InsoleMetricItem(label = "Gait Pattern", value = gaitPattern)
+                pressureNote?.takeIf { it.isNotBlank() }?.let { InsoleMetricItem(label = "Pressure Distribution", value = it) }
+                gaitPattern?.takeIf { it.isNotBlank() }?.let { InsoleMetricItem(label = "Gait Pattern", value = it) }
             }
             StatusBadge(
                 label = "New data",

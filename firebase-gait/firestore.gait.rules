@@ -50,6 +50,23 @@ service cloud.firestore {
         && get(path).data.active == true
         && gaitValidInvitation(get(path).data.doctorCode, request.auth.uid);
     }
+    // Consent flag on the patient's profile. Default ON: a doc missing the field (older
+    // accounts) counts as consenting, matching the client default (shareGaitWithCareTeam = true).
+    function gaitPatientConsents(patientUid) {
+      let path = /databases/$(database)/documents/users/$(patientUid);
+      return exists(path)
+        && (!('shareGaitWithCareTeam' in get(path).data)
+          || get(path).data.shareGaitWithCareTeam == true);
+    }
+    // Server-managed roster link care_links/{doctorUid}_{patientUid} (backend README → Care),
+    // gated by the patient's consent flag. Replaces the doctor-code gaitShares grant for reads.
+    function gaitCareLinkedDoctor(patientUid) {
+      let link = /databases/$(database)/documents/care_links/$(request.auth.uid + '_' + patientUid);
+      return gaitDoctor() && exists(link)
+        && get(link).data.doctor_uid == request.auth.uid
+        && get(link).data.patient_uid == patientUid
+        && gaitPatientConsents(patientUid);
+    }
     function gaitBoundedInt(value, maximum) {
       return value is int && value >= 0 && value <= maximum;
     }
@@ -175,7 +192,8 @@ service cloud.firestore {
     }
 
     match /gaitReports/{patientUid}/sessions/{sessionId} {
-      allow get, list: if gaitOwns(patientUid) || gaitLinkedDoctor(patientUid);
+      allow get, list: if gaitOwns(patientUid) || gaitLinkedDoctor(patientUid)
+        || gaitCareLinkedDoctor(patientUid);
       allow create: if gaitOwns(patientUid) && gaitHasRole(patientUid, 'PATIENT')
         && gaitValidReport(request.resource.data, patientUid, sessionId);
       allow update: if gaitOwns(patientUid) && gaitHasRole(patientUid, 'PATIENT')
@@ -185,7 +203,8 @@ service cloud.firestore {
 
       match /details/{chunkId} {
         allow get, list: if gaitOwns(patientUid)
-          || (gaitLinkedDoctor(patientUid) && gaitDetailParentExists(patientUid, sessionId));
+          || ((gaitLinkedDoctor(patientUid) || gaitCareLinkedDoctor(patientUid))
+            && gaitDetailParentExists(patientUid, sessionId));
         allow create, update: if gaitOwns(patientUid) && gaitHasRole(patientUid, 'PATIENT')
           && gaitValidDetailChunk(request.resource.data, chunkId, patientUid, sessionId);
         // Cleanup must remain possible after a parent has already been deleted.

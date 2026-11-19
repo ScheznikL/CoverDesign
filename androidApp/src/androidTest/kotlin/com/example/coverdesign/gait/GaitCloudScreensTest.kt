@@ -16,35 +16,30 @@ import org.junit.Test
 class GaitCloudScreensTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun connectedDoctorAndRetryActionsAreExplicitAndNoVideoUploadIsOffered() {
-        var revoked = false
+    @Test fun syncActionIsExplicitAndNoVideoUploadIsOffered() {
         var synced = false
-        val link = GaitPatientLink("patient-a", "doctor-a", "Test patient", "Test doctor", true)
         compose.setContent {
             AppTheme {
-                GaitCloudContent("Waiting for connection.", 2, null, true, link, false, null,
-                    "", false, null, {}, {}, { revoked = true }, { synced = true }, {}, {})
+                GaitCloudContent("Waiting for connection.", 2, null, signedIn = true,
+                    onSync = { synced = true }, onBack = {})
             }
         }
-        compose.onNodeWithTag("gait-connected-doctor").assertTextEquals("Test doctor")
-        compose.onNodeWithTag("gait-share-results").assertIsNotEnabled()
         compose.onNodeWithTag("gait-sync-now").performScrollTo().performClick()
-        compose.onNodeWithTag("gait-revoke-sharing").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(true, synced); assertEquals(true, revoked) }
+        compose.runOnIdle { assertEquals(true, synced) }
         compose.onNodeWithText("Upload video").assertDoesNotExist()
     }
 
-    @Test fun inaccessibleSharingStateDoesNotOfferAStaleDoctor() {
-        val stale = GaitPatientLink("patient-a", "doctor-a", "Test patient", "Previously connected doctor", true)
+    @Test fun patientSyncScreenNoLongerOffersCodeSharing() {
+        // Code-based doctor sharing was dropped; consent now lives on the profile (see note).
         compose.setContent {
             AppTheme {
-                GaitCloudContent("Not connected.", 0, null, true, stale, false,
-                    "Unable to confirm sharing access.", "", false, null, {}, {}, {}, {}, {}, {})
+                GaitCloudContent("Not connected.", 0, null, signedIn = true, onSync = {}, onBack = {})
             }
         }
-        compose.onNodeWithTag("gait-connected-doctor").assertDoesNotExist()
+        compose.onNodeWithTag("gait-doctor-code-input").assertDoesNotExist()
         compose.onNodeWithTag("gait-share-results").assertDoesNotExist()
-        compose.onNodeWithText("Retry sharing status").assertExists()
+        compose.onNodeWithTag("gait-connected-doctor").assertDoesNotExist()
+        compose.onNodeWithTag("gait-sharing-profile-note").assertExists()
     }
 
     @Test fun patientListDisplaysOnlyProvidedAuthorizedNamesAndSelection() {

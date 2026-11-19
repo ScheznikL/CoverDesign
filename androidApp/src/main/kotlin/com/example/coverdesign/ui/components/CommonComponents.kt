@@ -63,22 +63,6 @@ fun ErrorScreen(message: String, onRetry: (() -> Unit)? = null, modifier: Modifi
     }
 }
 
-@Composable
-fun DemoRehabilitationNotice(modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-    ) {
-        Text(
-            "Demo data — not your gait measurements. Your measured angles are in Gait analysis.",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(12.dp)
-        )
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppTopBar(

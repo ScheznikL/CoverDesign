@@ -27,8 +27,10 @@ class FireAuthRepositoryImpl : FireAuthRepository {
         val displayName: String = "",
         val phone: String = "",
         val role: String = UserRole.PATIENT.name,
-        val createdAt: Long = 0L
-    )
+        val createdAt: Long = 0L,
+        // Default on (opt-out). Absent on older docs → true, matching the gait rules' default-consent check.
+        val shareGaitWithCareTeam: Boolean = true
+)
 
     private fun usersCollection() = firestore.collection("users")
 
@@ -75,7 +77,8 @@ class FireAuthRepositoryImpl : FireAuthRepository {
             displayName = user.displayName,
             phone = user.phone,
             role = user.role.name,
-            createdAt = user.createdAt
+            createdAt = user.createdAt,
+            shareGaitWithCareTeam = user.shareGaitWithCareTeam
         )
         usersCollection().document(user.uid).set(doc)
         Resource.Success(Unit)
@@ -98,11 +101,24 @@ class FireAuthRepositoryImpl : FireAuthRepository {
                 displayName = doc.displayName,
                 phone = doc.phone,
                 role = runCatching { UserRole.valueOf(doc.role) }.getOrDefault(UserRole.PATIENT),
-                createdAt = doc.createdAt
+                createdAt = doc.createdAt,
+                shareGaitWithCareTeam = doc.shareGaitWithCareTeam
             )
         )
     } catch (e: Exception) {
         Resource.Error(e.toAuthMessage("Failed to load user profile"), e)
+    }
+
+    override suspend fun setGaitSharingConsent(enabled: Boolean): Resource<Unit> = try {
+        val uid = auth.currentUser?.uid ?: return Resource.Error("Not signed in.")
+        val ref = usersCollection().document(uid)
+        val snapshot = ref.get()
+        if (!snapshot.exists) return Resource.Error("profile_not_found")
+        // Read-modify-write the whole profile doc (GitLive commonMain uses typed set()).
+        ref.set(snapshot.data<UserDocument>().copy(shareGaitWithCareTeam = enabled))
+        Resource.Success(Unit)
+    } catch (e: Exception) {
+        Resource.Error(e.toAuthMessage("Failed to update sharing setting"), e)
     }
 
     override fun getCurrentUserId(): String? = auth.currentUser?.uid

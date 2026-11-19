@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -62,10 +63,16 @@ fun ProfileScreen(
     onGaitProfile: (() -> Unit)? = null
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val isPatient = state.appUser?.role == UserRole.PATIENT
     ProfileContent(
         appUser = state.appUser,
         onSignOut = { viewModel.onAction(AuthAction.SignOut) },
-        onGaitProfile = onGaitProfile
+        onGaitProfile = onGaitProfile,
+        // Patient-only consent control; doctors don't share their own gait data.
+        gaitSharingEnabled = if (isPatient) state.appUser?.shareGaitWithCareTeam ?: true else null,
+        onGaitSharingChange = if (isPatient) {
+            { enabled -> viewModel.onAction(AuthAction.SetGaitSharingConsent(enabled)) }
+        } else null
     )
 }
 
@@ -73,7 +80,9 @@ fun ProfileScreen(
 internal fun ProfileContent(
     appUser: AppUser?,
     onSignOut: () -> Unit,
-    onGaitProfile: (() -> Unit)? = null
+    onGaitProfile: (() -> Unit)? = null,
+    gaitSharingEnabled: Boolean? = null,
+    onGaitSharingChange: ((Boolean) -> Unit)? = null
 ) {
     Scaffold(
         topBar = { AppTopBar(title = "Profile") }
@@ -216,6 +225,43 @@ internal fun ProfileContent(
                         Text("Height, weight, age and walking settings", style = MaterialTheme.typography.bodySmall)
                     }
                     Icon(Icons.Default.ChevronRight, contentDescription = null)
+                }
+            }
+
+            // ── Gait data sharing (patient only) ──────────────────────────────
+            if (gaitSharingEnabled != null && onGaitSharingChange != null) {
+                Text(
+                    "Data sharing",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Share gait data with my care team",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+                            )
+                            Text(
+                                "Lets doctors you're linked with open your saved gait reports. Turn off to keep them private.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Switch(checked = gaitSharingEnabled, onCheckedChange = onGaitSharingChange)
+                    }
                 }
             }
 

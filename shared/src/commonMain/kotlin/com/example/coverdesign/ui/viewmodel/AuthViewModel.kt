@@ -65,6 +65,19 @@ class AuthViewModel(
             is AuthAction.ClearError -> setState { copy(error = null) }
             is AuthAction.ToggleMode -> setState { copy(isRegisterMode = !isRegisterMode) }
             is AuthAction.PickRole -> setState { copy(role = action.role) }
+            is AuthAction.SetGaitSharingConsent -> setGaitSharingConsent(action.enabled)
+        }
+    }
+
+    private fun setGaitSharingConsent(enabled: Boolean) {
+        // Optimistic: reflect the toggle immediately, revert if the write fails.
+        val previous = uiState.value.appUser
+        setState { copy(appUser = appUser?.copy(shareGaitWithCareTeam = enabled)) }
+        viewModelScope.launch {
+            when (val result = authRepo.setGaitSharingConsent(enabled)) {
+                is Resource.Error -> setState { copy(appUser = previous, error = result.message) }
+                else -> {}
+            }
         }
     }
 
@@ -239,4 +252,5 @@ sealed class AuthAction {
     data class ResetPassword(val email: String) : AuthAction()
     object ClearError : AuthAction()
     object ToggleMode : AuthAction()
+    data class SetGaitSharingConsent(val enabled: Boolean) : AuthAction()
 }

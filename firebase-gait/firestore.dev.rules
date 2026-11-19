@@ -50,6 +50,19 @@ service cloud.firestore {
         && get(path).data.active == true
         && gaitValidInvitation(get(path).data.doctorCode, request.auth.uid);
     }
+    function gaitPatientConsents(patientUid) {
+      let path = /databases/$(database)/documents/users/$(patientUid);
+      return exists(path)
+        && (!('shareGaitWithCareTeam' in get(path).data)
+          || get(path).data.shareGaitWithCareTeam == true);
+    }
+    function gaitCareLinkedDoctor(patientUid) {
+      let link = /databases/$(database)/documents/care_links/$(request.auth.uid + '_' + patientUid);
+      return gaitDoctor() && exists(link)
+        && get(link).data.doctor_uid == request.auth.uid
+        && get(link).data.patient_uid == patientUid
+        && gaitPatientConsents(patientUid);
+    }
     function gaitBoundedInt(value, maximum) {
       return value is int && value >= 0 && value <= maximum;
     }
@@ -175,7 +188,8 @@ service cloud.firestore {
     }
 
     match /gaitReports/{patientUid}/sessions/{sessionId} {
-      allow get, list: if gaitOwns(patientUid) || gaitLinkedDoctor(patientUid);
+      allow get, list: if gaitOwns(patientUid) || gaitLinkedDoctor(patientUid)
+        || gaitCareLinkedDoctor(patientUid);
       allow create: if gaitOwns(patientUid) && gaitHasRole(patientUid, 'PATIENT')
         && gaitValidReport(request.resource.data, patientUid, sessionId);
       allow update: if gaitOwns(patientUid) && gaitHasRole(patientUid, 'PATIENT')
@@ -185,7 +199,8 @@ service cloud.firestore {
 
       match /details/{chunkId} {
         allow get, list: if gaitOwns(patientUid)
-          || (gaitLinkedDoctor(patientUid) && gaitDetailParentExists(patientUid, sessionId));
+          || ((gaitLinkedDoctor(patientUid) || gaitCareLinkedDoctor(patientUid))
+            && gaitDetailParentExists(patientUid, sessionId));
         allow create, update: if gaitOwns(patientUid) && gaitHasRole(patientUid, 'PATIENT')
           && gaitValidDetailChunk(request.resource.data, chunkId, patientUid, sessionId);
         // Cleanup must remain possible after a parent has already been deleted.
@@ -197,13 +212,14 @@ service cloud.firestore {
     // Account roles are self-selected; an explicit gaitShare is still required.
     function devValidProfile(data, uid) {
       return data.keys().hasAll(['uid', 'email', 'displayName', 'phone', 'role', 'createdAt'])
-        && data.keys().hasOnly(['uid', 'email', 'displayName', 'phone', 'role', 'createdAt', 'hasInsoles'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'phone', 'role', 'createdAt', 'hasInsoles', 'shareGaitWithCareTeam'])
         && data.uid == uid && data.role in ['PATIENT', 'DOCTOR']
         && data.email is string && data.email.size() <= 320
         && data.displayName is string && data.displayName.size() <= 120
         && data.phone is string && data.phone.size() <= 80
         && gaitMillis(data.createdAt)
-        && (!('hasInsoles' in data) || data.hasInsoles is bool);
+        && (!('hasInsoles' in data) || data.hasInsoles is bool)
+        && (!('shareGaitWithCareTeam' in data) || data.shareGaitWithCareTeam is bool);
     }
     match /users/{uid} {
       // Missing own profiles may be read, then created after Firebase Auth login.
@@ -221,6 +237,14 @@ service cloud.firestore {
       match /orders/{orderId} {
         allow get, list, create, update, delete: if gaitOwns(uid);
       }
+    }
+
+    // Server-managed roster (backend writes it). Dev DB: let a doctor read their own links
+    // so the client roster fallback works; the server owns writes.
+    match /care_links/{linkId} {
+      allow get: if gaitSignedIn() && resource.data.doctor_uid == request.auth.uid;
+      allow list: if gaitDoctor() && resource.data.doctor_uid == request.auth.uid;
+      allow write: if false;
     }
   }
 }

@@ -2,6 +2,7 @@ package com.example.coverdesign.ui.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import com.example.coverdesign.domain.repo.FireAuthRepository
+import com.example.coverdesign.domain.usecase.GetDoctorPatientsUseCase
 import com.example.coverdesign.domain.util.Resource
 import com.example.coverdesign.ui.viewmodel.base.BaseViewModel
 import com.example.coverdesign.ui.viewmodel.base.UiEvent
@@ -33,13 +34,15 @@ data class ClinicianHomeUiState(
 sealed class ClinicianHomeUiEvent : UiEvent
 
 class ClinicianHomeViewModel(
-    private val authRepo: FireAuthRepository
+    private val authRepo: FireAuthRepository,
+    private val getDoctorPatients: GetDoctorPatientsUseCase,
 ) : BaseViewModel<ClinicianHomeUiState, ClinicianHomeUiEvent>() {
 
     override fun initialState() = ClinicianHomeUiState()
 
     init {
         loadDoctorInfo()
+        loadPatients()
     }
 
     private fun loadDoctorInfo() {
@@ -49,7 +52,30 @@ class ClinicianHomeViewModel(
                 is Resource.Success -> setState { copy(doctorName = result.data.displayName) }
                 else -> {}
             }
-            // TODO: fetch patient list from backend
         }
+    }
+
+    private fun loadPatients() {
+        viewModelScope.launch {
+            setState { copy(isLoading = true) }
+            when (val result = getDoctorPatients()) {
+                is Resource.Success -> {
+                    val summaries = result.data.map { it.toSummary() }
+                    setState {
+                        copy(
+                            allPatients = summaries,
+                            recentPatients = summaries.take(RECENT_PATIENT_COUNT),
+                            isLoading = false,
+                        )
+                    }
+                }
+
+                else -> setState { copy(isLoading = false) }
+            }
+        }
+    }
+
+    private companion object {
+        const val RECENT_PATIENT_COUNT = 5
     }
 }

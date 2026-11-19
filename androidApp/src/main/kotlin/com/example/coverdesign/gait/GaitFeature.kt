@@ -29,18 +29,37 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.coverdesign.domain.model.GaitProfileInput
 import com.example.coverdesign.domain.repo.FireAuthRepository
+import com.example.coverdesign.domain.usecase.UpsertGaitProfileUseCase
+import com.example.coverdesign.domain.util.currentEpochMillis
 import com.example.coverdesign.ui.components.AppTopBar
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
+
+/** Maps the on-device gait profile to the server contract (biometrics + capture settings). */
+private fun GaitProfile.toInput() = GaitProfileInput(
+    heightCm = heightCm,
+    weightKg = weightKg,
+    sex = sex,
+    age = age,
+    passSteps = passSteps,
+    targetStepsPerView = targetStepsPerView,
+    passDurationSeconds = passDurationSeconds,
+    targetDurationSecondsPerView = targetDurationSecondsPerView,
+    updatedAt = currentEpochMillis()
+)
 
 /** Feature entry point. All local state is keyed by the authenticated account. */
 @Composable
 fun GaitFeature(onBack: () -> Unit, openProfile: Boolean = false, openHistory: Boolean = false) {
     val context = LocalContext.current
     val auth: FireAuthRepository = koinInject()
+    val upsertGaitProfile: UpsertGaitProfileUseCase = koinInject()
+    val scope = rememberCoroutineScope()
     val uid = auth.getCurrentUserId()
     if (uid == null) {
         Column(Modifier.padding(24.dp)) {
@@ -105,6 +124,8 @@ fun GaitFeature(onBack: () -> Unit, openProfile: Boolean = false, openHistory: B
         } }, onBack = { if (seen) backToMenu() else onBack() })
         "profile" -> GaitProfileEditor(initial = profile, onSave = { updated -> accessData {
             store.saveProfile(updated); profile = updated; page = "menu"
+            // Best-effort sync of the profile to the rehab server; local save is the source of truth.
+            scope.launch { upsertGaitProfile(updated.toInput()) }
         } }, onBack = { if (profile == null) onBack() else backToMenu() })
         "menu" -> profile?.let { p -> GaitMenu(p, onStart = { measurementMethod = GaitMethod.MARKERS; selected = null; unsaved = false; page = "capture" }, onHistory = { accessData { sessions = store.sessions(); page = "history" } }, onProfile = { page = "profile" }, onInstructions = { page = "instructions" }, onBack = onBack,
             onVideo = { selected = null; unsaved = false; page = "video" },

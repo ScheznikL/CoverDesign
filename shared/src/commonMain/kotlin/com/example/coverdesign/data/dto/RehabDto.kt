@@ -84,8 +84,27 @@ data class DoctorRecommendationDto(
 
 @Serializable
 data class SubmitRehabSessionDto(
-    @SerialName("video_path")       val videoPath:       String,  // Firebase Storage path, e.g. "sessions/<uid>/pose_<ts>.mp4"
-    @SerialName("duration_seconds") val durationSeconds: Int = 0
+    @SerialName("video_path")         val videoPath:          String,  // Firebase Storage path, e.g. "sessions/<uid>/pose_<ts>.mp4"
+    @SerialName("duration_seconds")   val durationSeconds:    Int = 0,
+    @SerialName("measurement_method") val measurementMethod:  String? = null,  // "MARKERS" | "POSE"
+    @SerialName("acquisition_source") val acquisitionSource:  String? = null,  // "LIVE" | "VIDEO"
+    @SerialName("views")              val views:              List<String> = emptyList()  // subset of "FRONT","BACK"
+)
+
+// ── User gait profile (biometrics + capture settings) ──────────────────────────
+// Sent to its own user-scoped location; the server reads it when analysing a video.
+
+@Serializable
+data class GaitProfileDto(
+    @SerialName("height_cm")                        val heightCm:                     Int,
+    @SerialName("weight_kg")                        val weightKg:                     Int,
+    @SerialName("sex")                              val sex:                          String,  // "Female" | "Male" | "Other" | "Prefer not to say"
+    @SerialName("age")                              val age:                          Int,
+    @SerialName("pass_steps")                       val passSteps:                    Int,
+    @SerialName("target_steps_per_view")            val targetStepsPerView:           Int,
+    @SerialName("pass_duration_seconds")            val passDurationSeconds:          Int,
+    @SerialName("target_duration_seconds_per_view") val targetDurationSecondsPerView: Int,
+    @SerialName("updated_at")                       val updatedAt:                    Long
 )
 
 @Serializable

@@ -5,6 +5,7 @@ import com.example.coverdesign.domain.model.CopPoint
 import com.example.coverdesign.domain.model.DoctorRecommendation
 import com.example.coverdesign.domain.model.FootPressureMap
 import com.example.coverdesign.domain.model.GaitAnalysisResult
+import com.example.coverdesign.domain.model.GaitProfileInput
 import com.example.coverdesign.domain.model.GaitSession
 import com.example.coverdesign.domain.model.InsoleData
 import com.example.coverdesign.domain.model.RecommendationTag
@@ -147,4 +148,28 @@ fun DoctorRecommendation.toDto() = DoctorRecommendationDto(
         RecommendationTag.INSOLE_BASED    -> "insole_based"
     },
     text = text
+)
+
+fun GaitProfileInput.toDto() = GaitProfileDto(
+    heightCm                     = heightCm,
+    weightKg                     = weightKg,
+    sex                          = sex,
+    age                          = age,
+    passSteps                    = passSteps,
+    targetStepsPerView           = targetStepsPerView,
+    passDurationSeconds          = passDurationSeconds,
+    targetDurationSecondsPerView = targetDurationSecondsPerView,
+    updatedAt                    = updatedAt
+)
+
+fun GaitProfileDto.toDomain() = GaitProfileInput(
+    heightCm                     = heightCm,
+    weightKg                     = weightKg,
+    sex                          = sex,
+    age                          = age,
+    passSteps                    = passSteps,
+    targetStepsPerView           = targetStepsPerView,
+    passDurationSeconds          = passDurationSeconds,
+    targetDurationSecondsPerView = targetDurationSecondsPerView,
+    updatedAt                    = updatedAt
 )

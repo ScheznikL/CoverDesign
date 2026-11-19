@@ -67,7 +67,7 @@ class RecommendationsViewModel(
 data class RecommendationsUiState(
     val latestSession: GaitSession? = null,
     val previousSession: GaitSession? = null,
-    val patientName: String = "Maria L.",
+    val patientName: String = "Patient",
     val recommendations: List<DoctorRecommendation> = emptyList(),
     val isLoading: Boolean = false
 ) : UiState

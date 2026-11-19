@@ -8,6 +8,9 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.navArgument
 import com.example.coverdesign.gait.GaitDoctorScreen
 import com.example.coverdesign.ui.screens.ProfileScreen
+import com.example.coverdesign.ui.screens.clinician.home.ClinicianHomeScreen
+import com.example.coverdesign.ui.screens.clinician.patients.ClinicianPatientsScreen
+import com.example.coverdesign.ui.screens.clinician.recommendation.WriteRecommendationScreen
 
 
 fun NavGraphBuilder.clinicianGraph(
@@ -18,14 +21,30 @@ fun NavGraphBuilder.clinicianGraph(
         startDestination = Screen.ClinicianHome.route
     ) {
         composable(Screen.ClinicianHome.route) {
-            GaitDoctorScreen()
+            ClinicianHomeScreen(
+                onPatientClick = { patientId ->
+                    navController.navigate(Screen.WriteRecommendation.createRoute(patientId))
+                },
+                onViewAllPatientsClick = {
+                    navController.navigate(ClinicianNavItem.Patients.route)
+                },
+                onNotificationsClick = {
+                    // TODO: clinician notifications screen not yet implemented
+                }
+            )
         }
         composable(Screen.ClinicianProfile.route) {
             ProfileScreen()
         }
         composable(ClinicianNavItem.Patients.route) {
-            GaitDoctorScreen()
+            ClinicianPatientsScreen(
+                onBack = { navController.popBackStack() },
+                onPatientClick = { patientId ->
+                    navController.navigate(Screen.WriteRecommendation.createRoute(patientId))
+                }
+            )
         }
+        // Reports keeps the gait cloud results screen introduced by the gait-integration PR.
         composable(ClinicianNavItem.Reports.route) {
             GaitDoctorScreen()
         }
@@ -37,8 +56,10 @@ fun NavGraphBuilder.clinicianGraph(
             arguments = listOf(navArgument("patientId") { type = NavType.StringType })
         ) { backStackEntry ->
             val patientId = backStackEntry.arguments?.getString("patientId").orEmpty()
-            // Keep old links safe while showing only this doctor's authorized numerical reports.
-            GaitDoctorScreen(initialPatientUid = patientId, onBack = { navController.popBackStack() })
+            WriteRecommendationScreen(
+                patientId = patientId,
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }

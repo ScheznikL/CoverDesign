@@ -23,8 +23,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.coverdesign.domain.usecase.GetDoctorPatientsUseCase
+import com.example.coverdesign.domain.util.Resource
 import com.example.coverdesign.ui.components.AppTopBar
 import com.example.coverdesign.ui.theme.AppTheme
+import org.koin.compose.koinInject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
@@ -46,113 +49,28 @@ internal fun GaitCloudScreen(onBack: () -> Unit) {
 
 @Composable
 private fun PatientSharingState(repository: GaitCloudRepository, sync: GaitSyncState, onBack: () -> Unit) {
-    var link by remember { mutableStateOf<GaitPatientLink?>(null) }
-    var loading by remember { mutableStateOf(sync.userId != null) }
-    var readError by remember { mutableStateOf<String?>(null) }
-    var actionMessage by remember { mutableStateOf<String?>(null) }
-    var code by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var reload by remember { mutableIntStateOf(0) }
-    var confirmRevoke by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(repository, reload) {
-        link = null; readError = null
-        if (sync.userId == null) { loading = false; return@LaunchedEffect }
-        loading = true
-        repository.myShare().catch {
-            link = null; loading = false
-            readError = "Unable to confirm sharing access. Check your connection and retry."
-        }.collect { link = it?.takeIf { item -> item.active }; loading = false; readError = null }
-    }
-    LaunchedEffect(loading, reload) {
-        if (loading) {
-            delay(12_000)
-            if (loading) {
-                loading = false
-                readError = "Sharing access has not been confirmed. Reconnect and retry."
-            }
-        }
-    }
-    fun share() {
-        if (busy || code.isBlank()) return
-        busy = true; actionMessage = null
-        scope.launch {
-            try {
-                val name = repository.shareWithDoctor(code.trim())
-                code = ""; actionMessage = "Results shared with $name."
-                repository.syncNow(); reload++
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { actionMessage = "Could not share results. Check the doctor's code and your connection, then retry." }
-            finally { busy = false }
-        }
-    }
-    fun revoke() {
-        confirmRevoke = false; busy = true; actionMessage = null
-        scope.launch {
-            try {
-                repository.revokeDoctor(); link = null
-                actionMessage = "Sharing stopped."; reload++
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { actionMessage = "Could not stop sharing. Reconnect and retry." }
-            finally { busy = false }
-        }
-    }
-    GaitCloudContent(sync.message, sync.pending, sync.lastSyncedAt, sync.userId != null,
-        link, loading, readError, code, busy, actionMessage,
-        onCodeChange = { code = it.take(80) }, onShare = ::share,
-        onRevoke = { confirmRevoke = true }, onSync = repository::syncNow,
-        onRetry = { reload++; repository.syncNow() }, onBack = onBack)
-    if (confirmRevoke) AlertDialog(onDismissRequest = { confirmRevoke = false },
-        title = { Text("Stop sharing results?") },
-        text = { Text("Your doctor will no longer be able to open your shared results through this application.") },
-        confirmButton = { TextButton(onClick = ::revoke) { Text("Stop sharing") } },
-        dismissButton = { TextButton(onClick = { confirmRevoke = false }) { Text("Cancel") } })
+    GaitCloudContent(
+        syncMessage = sync.message, pending = sync.pending, lastSyncedAt = sync.lastSyncedAt,
+        signedIn = sync.userId != null, onSync = repository::syncNow, onBack = onBack
+    )
 }
 
 @Composable
 internal fun GaitCloudContent(
     syncMessage: String, pending: Int, lastSyncedAt: Long?, signedIn: Boolean,
-    link: GaitPatientLink?, loading: Boolean, readError: String?, code: String,
-    busy: Boolean, actionMessage: String?, onCodeChange: (String) -> Unit,
-    onShare: () -> Unit, onRevoke: () -> Unit, onSync: () -> Unit,
-    onRetry: () -> Unit, onBack: () -> Unit
+    onSync: () -> Unit, onBack: () -> Unit
 ) {
-    Scaffold(topBar = { AppTopBar("Sharing and sync", onBack) }) { padding ->
+    Scaffold(topBar = { AppTopBar("Sync", onBack) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Your measured results", style = MaterialTheme.typography.headlineSmall)
             Text("Full numerical session reports, including angle charts and saved profile settings, sync while you are signed in and connected. Photos and videos stay on your phone.",
                 style = MaterialTheme.typography.bodyMedium)
-            CloudStatusCard(syncMessage, pending, lastSyncedAt, signedIn && !busy, onSync)
-            if (!signedIn) Text("Sign in to sync results and share them with your doctor.")
-            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("gait-sharing-loading"))
-            readError?.let { message ->
-                Text(message, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = onRetry, enabled = !busy) { Text("Retry sharing status") }
-            }
-            if (signedIn && !loading && readError == null) {
-                CloudCard {
-                    Text("Doctor access", style = MaterialTheme.typography.titleMedium)
-                    if (link != null && link.active) {
-                        Text(link.doctorDisplayName.ifBlank { "Your connected doctor" },
-                            style = MaterialTheme.typography.titleSmall, modifier = Modifier.testTag("gait-connected-doctor"))
-                        Text("This doctor can open your uploaded session reports, angle graphs and comparable trends.")
-                        OutlinedButton(onClick = onRevoke, enabled = !busy,
-                            modifier = Modifier.testTag("gait-revoke-sharing")) { Text("Stop sharing") }
-                    } else {
-                        Text("No doctor has access to your results. Ask your doctor for their sharing code.")
-                    }
-                    OutlinedTextField(value = code, onValueChange = onCodeChange, enabled = !busy,
-                        label = { Text("Doctor's sharing code") }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("gait-doctor-code-input"))
-                    Button(onClick = onShare, enabled = !busy && code.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth().testTag("gait-share-results")) {
-                        Text(if (link == null) "Share results" else "Change connected doctor")
-                    }
-                }
-            }
-            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            actionMessage?.let { Text(it, modifier = Modifier.testTag("gait-sharing-message")) }
+            CloudStatusCard(syncMessage, pending, lastSyncedAt, signedIn, onSync)
+            if (!signedIn) Text("Sign in to sync your results.")
+            Text("Your care team's access to these reports is controlled by the gait-sharing setting in your profile.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("gait-sharing-profile-note"))
             Text("Shared session reports describe measured angles and capture settings. They are not an automatic diagnosis or a medical normality score.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -165,59 +83,46 @@ internal fun GaitDoctorScreen(initialPatientUid: String? = null, onBack: (() -> 
     val context = LocalContext.current.applicationContext
     val repository = remember(context) { GaitCloud.get(context) }
     val sync by repository.state.collectAsStateWithLifecycle()
-    key(sync.userId) { DoctorResultsState(repository, sync, initialPatientUid, onBack, context) }
+    key(sync.userId) { DoctorResultsState(repository, sync, initialPatientUid, onBack) }
 }
 
 @Composable
 private fun DoctorResultsState(repository: GaitCloudRepository, sync: GaitSyncState,
-    initialPatientUid: String?, onBack: (() -> Unit)?, context: Context) {
+    initialPatientUid: String?, onBack: (() -> Unit)?) {
+    val getDoctorPatients: GetDoctorPatientsUseCase = koinInject()
     var patients by remember { mutableStateOf<List<GaitPatientLink>>(emptyList()) }
     var reports by remember { mutableStateOf<List<GaitCloudReport>>(emptyList()) }
     var patientUid by remember { mutableStateOf(initialPatientUid) }
-    var code by remember { mutableStateOf<String?>(null) }
-    var copied by remember { mutableStateOf(false) }
     var patientsLoading by remember { mutableStateOf(sync.userId != null) }
     var reportsLoading by remember { mutableStateOf(false) }
     var patientsError by remember { mutableStateOf<String?>(null) }
     var reportsError by remember { mutableStateOf<String?>(null) }
-    var codeError by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     var openSessionId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(repository, reload) {
-        code = null; copied = false; codeError = null
-        if (sync.userId == null) return@LaunchedEffect
-        try { code = repository.doctorCode() }
-        catch (cancelled: CancellationException) { throw cancelled }
-        catch (_: Exception) { codeError = "Unable to load your sharing code. Check your connection and doctor account, then retry." }
-    }
-    LaunchedEffect(repository, reload) {
+    // The roster is the doctor's care_links patients (server API + Firestore fallback).
+    LaunchedEffect(repository, reload, sync.userId) {
         patients = emptyList(); patientsError = null
         if (sync.userId == null) { patientsLoading = false; return@LaunchedEffect }
         patientsLoading = true
-        repository.patients().catch {
-            patients = emptyList(); reports = emptyList(); patientsLoading = false
-            patientsError = "Unable to verify your patient list. Reconnect and retry."
-        }.collect { links ->
-            patients = links.filter { it.active && it.doctorUid == sync.userId }
-            patientsLoading = false; patientsError = null
-        }
-    }
-    LaunchedEffect(patientsLoading, reload) {
-        if (patientsLoading) {
-            delay(12_000)
-            if (patientsLoading) {
-                patientsLoading = false
-                patientsError = "Your patient list has not been confirmed. Reconnect and retry."
+        when (val result = getDoctorPatients()) {
+            is Resource.Success -> {
+                patients = result.data.map { GaitPatientLink(it.patientUid, sync.userId!!, it.name, "", true) }
+                patientsLoading = false; patientsError = null
             }
+            is Resource.Error -> {
+                patients = emptyList(); patientsLoading = false
+                patientsError = "Unable to load your patient list. Reconnect and retry."
+            }
+            else -> {}
         }
     }
     val selected = patients.firstOrNull { it.patientUid == patientUid }
     LaunchedEffect(repository, selected?.patientUid, reload) {
         reports = emptyList(); reportsError = null; reportsLoading = selected != null
         if (selected == null) return@LaunchedEffect
-        repository.reports(selected.patientUid).catch {
+        repository.careReports(selected.patientUid).catch {
             reports = emptyList(); reportsLoading = false
-            reportsError = "These results are unavailable. Access may have changed; reconnect and retry."
+            reportsError = "These results are unavailable. The patient may have turned off sharing; reconnect and retry."
         }.collect { verified ->
             reports = verified.filter { it.patientUid == selected.patientUid }
             reportsLoading = false; reportsError = null
@@ -241,21 +146,7 @@ private fun DoctorResultsState(repository: GaitCloudRepository, sync: GaitSyncSt
     Scaffold(topBar = { AppTopBar("Patient results", onBack) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            CloudCard {
-                Text("Your sharing code", style = MaterialTheme.typography.titleMedium)
-                Text("Give this code to a patient. Their results become available after they choose to share with you.")
-                code?.let { sharingCode ->
-                    Text(sharingCode, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.testTag("gait-doctor-sharing-code"))
-                    TextButton(onClick = {
-                        (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-                            .setPrimaryClip(ClipData.newPlainText("Doctor sharing code", sharingCode))
-                        copied = true
-                    }) { Text(if (copied) "Code copied" else "Copy code") }
-                }
-                codeError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                if (code == null && codeError == null && sync.userId != null) LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
-            if (sync.userId == null) Text("Sign in with your doctor account to view shared results.")
+            if (sync.userId == null) Text("Sign in with your doctor account to view patient results.")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Patients", style = MaterialTheme.typography.titleLarge)
                 TextButton(onClick = { reload++ }) { Text("Refresh") }
@@ -293,7 +184,7 @@ private fun DoctorSessionState(repository: GaitCloudRepository, patient: GaitPat
         (report.detailManifest?.let { mapOf(report.sessionId to it) } ?: emptyMap())
     LaunchedEffect(repository, patient.patientUid, report.sessionId, report.detailManifest, reload) {
         session = null; sessionLoading = true; sessionError = null
-        repository.session(patient.patientUid, report.sessionId).catch {
+        repository.careSession(patient.patientUid, report.sessionId).catch {
             session = null; sessionLoading = false
             sessionError = "The session report is unavailable. Access may have changed; reconnect and retry."
         }.collect { verified ->
@@ -306,7 +197,7 @@ private fun DoctorSessionState(repository: GaitCloudRepository, patient: GaitPat
     }
     LaunchedEffect(repository, patient.patientUid, report.comparisonGroupId, expectedHistoryManifests, reload) {
         history = emptyList(); verifiedHistoryManifests = null; historyLoading = true; historyError = null
-        repository.sessionHistory(patient.patientUid, report.comparisonGroupId).catch {
+        repository.careSessionHistory(patient.patientUid, report.comparisonGroupId).catch {
             history = emptyList(); verifiedHistoryManifests = null; historyLoading = false
             historyError = "Earlier session reports could not be verified. Reconnect and retry."
         }.collect { verified ->
@@ -340,7 +231,7 @@ private fun DoctorSessionState(repository: GaitCloudRepository, patient: GaitPat
 @Composable
 internal fun GaitPatientListContent(patients: List<GaitPatientLink>, selectedUid: String?,
     showEmpty: Boolean, onSelect: (String) -> Unit) {
-    if (patients.isEmpty() && showEmpty) Text("No patients are sharing results with you yet.",
+    if (patients.isEmpty() && showEmpty) Text("No patients have shared gait data with you yet.",
         modifier = Modifier.testTag("gait-no-shared-patients"))
     patients.forEach { patient ->
         OutlinedButton(onClick = { onSelect(patient.patientUid) }, modifier = Modifier.fillMaxWidth()
@@ -540,11 +431,10 @@ private fun cloudAngle(value: Double) = String.format(Locale.US, "%.1f°", value
 private fun cloudSeconds(value: Long) = String.format(Locale.US, "%.1f", value / 1000.0)
 private fun cloudMethod(report: GaitCloudReport) = if (report.measurementMethod == GaitMethod.POSE) "Without markers" else "With markers"
 
-@Preview(name = "Patient result sharing", showBackground = true)
+@Preview(name = "Patient result sync", showBackground = true)
 @Composable
 private fun GaitCloudContentPreview() {
     AppTheme {
-        GaitCloudContent("Results are up to date.", 0, null, true, null, false, null,
-            "", false, null, {}, {}, {}, {}, {}, {})
+        GaitCloudContent("Results are up to date.", 0, null, signedIn = true, onSync = {}, onBack = {})
     }
 }

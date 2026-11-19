@@ -31,8 +31,12 @@ object ApiConstants {
 
         // rehab
         const val REHAB = "/rehab"                                  // GET — current user's sessions + recommendations
+        const val REHAB_PROFILE = "/rehab/profile"                  // GET/PUT — current user's gait profile (biometrics + settings)
         const val SUBMIT_REHAB_SESSION = "/rehab/sessions"          // POST — kick off processing of a recorded video
         const val REHAB_SESSION_STATUS = "/rehab/sessions/{taskId}/status" // GET — poll processing status
+
+        // care (doctor ↔ patient)
+        const val CARE_PATIENTS = "/care/patients"  // GET — the calling doctor's patient roster
 
         // auth
         const val LOGIN = "/auth/login"

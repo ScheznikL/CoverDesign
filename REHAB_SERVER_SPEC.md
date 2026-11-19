@@ -139,6 +139,38 @@ that user/session, otherwise send `null`.
 `tag` ∈ `"insole_based"` | `"photogrammetric"` (lowercase; unknown values map to
 `insole_based` on the client).
 
+### GaitProfile (user-scoped)
+Biometrics + capture settings for the current user. Stored at a **user location** (e.g.
+`rehab_profiles/<uid>`), independent of any single session. The server reads it when analysing a
+video so it can calibrate centimetre scale and age/sex-sensitive scoring.
+```json
+{
+  "height_cm": 181,
+  "weight_kg": 77,
+  "sex": "Male",
+  "age": 35,
+  "pass_steps": 4,
+  "target_steps_per_view": 12,
+  "pass_duration_seconds": 2,
+  "target_duration_seconds_per_view": 6,
+  "updated_at": 1731801600000
+}
+```
+| field | type | range / notes |
+|-------|------|---------------|
+| `height_cm` | int | 40–250 |
+| `weight_kg` | int | 10–350 |
+| `sex` | string | `"Female"` \| `"Male"` \| `"Other"` \| `"Prefer not to say"` |
+| `age` | int | 1–120 |
+| `pass_steps` | int | 2–10 (legacy step-based protocol) |
+| `target_steps_per_view` | int | 4–100 (legacy step-based protocol) |
+| `pass_duration_seconds` | int | 2–4 |
+| `target_duration_seconds_per_view` | int | 6–60 |
+| `updated_at` | int64 | epoch millis the client last wrote the profile |
+
+The profile is **not** embedded on returned `GaitSession`s — sessions persist separately and link to
+the owner by `uid`; the server joins the stored profile at analysis time.
+
 ---
 
 ## 3. Endpoints
@@ -155,13 +187,30 @@ Returns the current user's full rehab payload.
   **Do not fabricate data for arbitrary users** — empty arrays drive the client's
   "connect insole" / "make a scan" placeholders.
 
-### 3.2 `POST /rehab/sessions`
+### 3.2 `GET` / `PUT /rehab/profile`
+The current user's `GaitProfile` (biometrics + capture settings), resolved from the auth token.
+- `GET` returns the stored `GaitProfile`, or `404` if the user has never saved one.
+- `PUT` upserts it idempotently (body = `GaitProfile`); returns the stored profile. Validate the
+  ranges in the `GaitProfile` table; reject out-of-range values with `400`.
+
+### 3.3 `POST /rehab/sessions`
 Kick off processing of a recorded video already uploaded to Firebase Storage.
 
 Request:
 ```json
-{ "video_path": "sessions/<uid>/pose_1731801600000.mp4", "duration_seconds": 420 }
+{
+  "video_path": "sessions/<uid>/pose_1731801600000.mp4",
+  "duration_seconds": 420,
+  "measurement_method": "POSE",
+  "acquisition_source": "VIDEO",
+  "views": ["FRONT", "BACK"]
+}
 ```
+- `measurement_method` ∈ `"MARKERS"` \| `"POSE"` (marker vs. markerless analysis); optional.
+- `acquisition_source` ∈ `"LIVE"` \| `"VIDEO"`; optional.
+- `views` ⊆ `["FRONT","BACK"]`; may be empty when the capture flow does not distinguish views.
+- Older clients may omit these fields — treat them as absent, not an error.
+- The server joins the caller's stored `GaitProfile` (§3.2) for biometrics; it need not be resent here.
 Response (`202`/`200`):
 ```json
 { "task_id": "task_789", "status": "processing", "session": null }
@@ -169,7 +218,7 @@ Response (`202`/`200`):
 - Validate that `video_path` lives under the caller's own `sessions/<uid>/` prefix.
 - Server needs read access to the Firebase Storage bucket to fetch the video.
 
-### 3.3 `GET /rehab/sessions/{task_id}/status`
+### 3.4 `GET /rehab/sessions/{task_id}/status`
 Poll processing status. The client polls with back-off (~3s → 15s, up to ~60 attempts).
 ```json
 { "task_id": "task_789", "status": "processing", "session": null }

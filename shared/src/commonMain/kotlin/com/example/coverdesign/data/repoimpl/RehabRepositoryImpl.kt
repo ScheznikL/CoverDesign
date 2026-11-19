@@ -2,7 +2,9 @@ package com.example.coverdesign.data.repoimpl
 
 import com.example.coverdesign.data.dto.SubmitRehabSessionDto
 import com.example.coverdesign.data.dto.toDomain
+import com.example.coverdesign.data.dto.toDto
 import com.example.coverdesign.data.remote.service.RehabApiService
+import com.example.coverdesign.domain.model.GaitProfileInput
 import com.example.coverdesign.domain.model.RehabData
 import com.example.coverdesign.domain.model.RehabTask
 import com.example.coverdesign.domain.repo.RehabRepository
@@ -23,12 +25,32 @@ class RehabRepositoryImpl(
             }
         }
 
+    override suspend fun upsertGaitProfile(profile: GaitProfileInput): Resource<Unit> =
+        withContext(Dispatchers.Default) {
+            try {
+                api.putProfile(profile.toDto())
+                Resource.Success(Unit)
+            } catch (e: Exception) {
+                Resource.Error("Failed to save gait profile: ${e.message}", e)
+            }
+        }
+
     override suspend fun submitSession(
-        videoPath: String, durationSeconds: Int
+        videoPath: String,
+        durationSeconds: Int,
+        measurementMethod: String?,
+        acquisitionSource: String?,
+        views: List<String>
     ): Resource<String> = withContext(Dispatchers.Default) {
         try {
             val task = api.submitSession(
-                SubmitRehabSessionDto(videoPath = videoPath, durationSeconds = durationSeconds)
+                SubmitRehabSessionDto(
+                    videoPath = videoPath,
+                    durationSeconds = durationSeconds,
+                    measurementMethod = measurementMethod,
+                    acquisitionSource = acquisitionSource,
+                    views = views
+                )
             )
             Resource.Success(task.taskId)
         } catch (e: Exception) {

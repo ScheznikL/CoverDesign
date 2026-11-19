@@ -24,12 +24,25 @@ class SensorCameraViewModel(
 
     override fun initialState() = SensorCameraUiState()
 
-    /** @param videoPath Firebase Storage path, e.g. "sessions/<uid>/pose_<ts>.mp4". */
-    fun submitVideo(videoPath: String, durationSeconds: Int) {
+    /**
+     * @param videoPath Firebase Storage path, e.g. "sessions/<uid>/pose_<ts>.mp4".
+     * @param measurementMethod "MARKERS" | "POSE"; the SCAN flow is MediaPipe pose.
+     * @param acquisitionSource "LIVE" | "VIDEO".
+     * @param views subset of "FRONT","BACK" captured, empty when the flow does not distinguish them.
+     */
+    fun submitVideo(
+        videoPath: String,
+        durationSeconds: Int,
+        measurementMethod: String? = null,
+        acquisitionSource: String? = null,
+        views: List<String> = emptyList()
+    ) {
         viewModelScope.launch {
             setState { copy(status = SubmitStatus.Submitting, errorMessage = null) }
 
-            val taskId = when (val submit = submitRehabSession(videoPath, durationSeconds)) {
+            val taskId = when (val submit = submitRehabSession(
+                videoPath, durationSeconds, measurementMethod, acquisitionSource, views
+            )) {
                 is Resource.Success -> submit.data
                 is Resource.Error -> {
                     setState { copy(status = SubmitStatus.Error, errorMessage = submit.message) }
