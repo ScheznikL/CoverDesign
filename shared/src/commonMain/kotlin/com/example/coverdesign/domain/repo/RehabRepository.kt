@@ -1,6 +1,7 @@
 package com.example.coverdesign.domain.repo
 
 import com.example.coverdesign.domain.model.GaitProfileInput
+import com.example.coverdesign.domain.model.GaitSession
 import com.example.coverdesign.domain.model.RehabData
 import com.example.coverdesign.domain.model.RehabTask
 import com.example.coverdesign.domain.util.Resource
@@ -25,4 +26,11 @@ interface RehabRepository {
 
     /** Poll processing status for a submitted session. */
     suspend fun getSessionStatus(taskId: String): Resource<RehabTask>
+
+    /**
+     * Push an already-computed (on-device) gait session to the server so it can persist the
+     * result even when its own video-analysis module is unavailable. [session] `id` carries the
+     * uploaded video's session id; the server resolves the owner from auth.
+     */
+    suspend fun submitSessionData(session: GaitSession): Resource<Unit>
 }

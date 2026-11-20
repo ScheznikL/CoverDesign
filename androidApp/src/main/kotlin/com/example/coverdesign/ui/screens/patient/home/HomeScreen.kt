@@ -30,19 +30,20 @@ import androidx.compose.material.icons.outlined.BluetoothDisabled
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.DirectionsWalk
-import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.ShoppingBag
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -62,7 +63,6 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -80,8 +80,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.coverdesign.R
-import com.example.coverdesign.domain.model.BodyPosition
 import com.example.coverdesign.domain.model.CopPoint
+import com.example.coverdesign.domain.model.GaitMetricKey
+import com.example.coverdesign.domain.model.GaitReport
 import com.example.coverdesign.domain.model.GaitSession
 import com.example.coverdesign.domain.model.OrderCategory
 import com.example.coverdesign.domain.model.OrderListItem
@@ -89,6 +90,12 @@ import com.example.coverdesign.domain.model.OrderStatus
 import com.example.coverdesign.ui.components.EventHandler
 import com.example.coverdesign.ui.components.OrderStatusChip
 import com.example.coverdesign.ui.components.OrdersSyncErrorBanner
+import com.example.coverdesign.ui.screens.patient.home.demo.InsoleOrderDemoState
+import com.example.coverdesign.ui.screens.patient.home.demo.InsolePush
+import com.example.coverdesign.ui.screens.patient.home.demo.LivePressureChart
+import com.example.coverdesign.ui.screens.patient.home.demo.PressureSample
+import com.example.coverdesign.ui.screens.patient.home.demo.rememberInsoleOrderDemoState
+import com.example.coverdesign.ui.screens.patient.home.demo.rememberLivePressureStream
 import com.example.coverdesign.ui.theme.AppTheme
 import com.example.coverdesign.ui.theme.ChartEndRed
 import com.example.coverdesign.ui.theme.ChartStartGreen
@@ -106,7 +113,6 @@ import com.example.coverdesign.ui.viewmodel.HomeUiEvent
 import com.example.coverdesign.ui.viewmodel.HomeUiState
 import com.example.coverdesign.ui.viewmodel.HomeViewModel
 import com.example.coverdesign.ui.viewmodel.OrderSyncStatus
-import com.example.coverdesign.ui.viewmodel.RehabMockData
 import org.koin.compose.viewmodel.koinViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -130,6 +136,7 @@ fun HomeScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val gaitState = rememberGaitHomeState()
+    val insoleDemo = rememberInsoleOrderDemoState()
 
     EventHandler(viewModel.events) { event ->
         when (event) {
@@ -147,7 +154,8 @@ fun HomeScreen(
     HomeContent(
         state = state, onAction = viewModel::onAction,
         onGaitAnalysis = onGaitAnalysis, onRecordVideo = onRecordVideo,
-        gaitState = gaitState, onGaitHistory = onGaitHistory
+        gaitState = gaitState, onGaitHistory = onGaitHistory,
+        insoleDemo = insoleDemo
     )
 }
 
@@ -157,11 +165,16 @@ internal fun HomeContent(
     onGaitAnalysis: () -> Unit = {},
     onRecordVideo: () -> Unit = { onAction(HomeAction.StartRehabScan) },
     gaitState: GaitHomeUiState = GaitHomeUiState(),
-    onGaitHistory: () -> Unit = onGaitAnalysis
+    onGaitHistory: () -> Unit = onGaitAnalysis,
+    insoleDemo: InsoleOrderDemoState? = null
 ) {
     // Bounds of the top-bar info icon in root coordinates — drives the spotlight cutout.
     var infoIconBounds by remember { mutableStateOf<Rect?>(null) }
     var showTour by remember { mutableStateOf(false) }
+
+    // Live insole feed — streams (and scrolls) only once the demo insoles are connected.
+    val insolesConnected = insoleDemo?.insolesConnected == true
+    val livePressure = rememberLivePressureStream(active = insolesConnected)
 
     val openTour = {
         showTour = true
@@ -179,6 +192,16 @@ internal fun HomeContent(
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
         ) {
+            // ── Insole-arrival push ───────────────────────────────────────
+            insoleDemo?.notification?.let { push ->
+                InsolePushBanner(
+                    push = push,
+                    onOpen = { insoleDemo.deliverInsoles() },
+                    onDismiss = { insoleDemo.dismissNotification() },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+            }
+
             // ── New order CTA ─────────────────────────────────────────────
             NewOrderBanner(
                 onClick = { onAction(HomeAction.NewOrder) },
@@ -250,6 +273,8 @@ internal fun HomeContent(
             } else {
                 RehabSummaryCard(
                     latestSession = state.rehabSessions.firstOrNull(),
+                    insolesConnected = insolesConnected,
+                    pressureStream = livePressure,
                     onOrderInsoles = { onAction(HomeAction.OrderInsoles) },
                     onStartScan = { onAction(HomeAction.StartRehabScan) },
                     modifier = Modifier.padding(horizontal = 16.dp).testTag("home-server-rehab-summary")
@@ -271,15 +296,26 @@ internal fun HomeContent(
                 )
             }
 
-            if (state.recentOrders.isEmpty()) {
+            // When the demo is active, its insole order leads the list so its SHIPPED → DELIVERED
+            // flip is visible alongside any real orders.
+            val orders = if (insoleDemo != null) {
+                listOf(insoleDemo.insoleOrder) +
+                    state.recentOrders.filterNot { it.category == OrderCategory.INSOLE }
+            } else {
+                state.recentOrders
+            }
+            if (orders.isEmpty()) {
                 EmptyOrdersCard(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             } else {
-                state.recentOrders.forEach { item ->
+                orders.forEach { item ->
                     RecentOrderCard(
                         item    = item,
-                        onClick = { onAction(HomeAction.OpenOrder(item.orderId)) },
+                        onClick = {
+                            if (insoleDemo?.isDemoOrder(item.orderId) == true) insoleDemo.deliverInsoles()
+                            else onAction(HomeAction.OpenOrder(item.orderId))
+                        },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
@@ -317,6 +353,8 @@ internal fun HomeContent(
 @Composable
 private fun RehabSummaryCard(
     latestSession: GaitSession?,
+    insolesConnected: Boolean,
+    pressureStream: List<PressureSample>,
     onOrderInsoles: () -> Unit,
     onStartScan: () -> Unit,
     modifier: Modifier = Modifier
@@ -330,94 +368,82 @@ private fun RehabSummaryCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // ── Score chips — only when a session exists ──────────────────
+            // ── Inclination chips — only when a session exists ────────────
             if (latestSession != null) {
+                val report = latestSession.report
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ScoreChip(
-                        "Posture", latestSession.gaitAnalysis.postureScore, Modifier.weight(1f)
+                    InclinationChip(
+                        "Shoulders", report.typicalInclinations[GaitMetricKey.FRONT_SHOULDERS], Modifier.weight(1f)
                     )
-                    ScoreChip(
-                        "Balance", latestSession.gaitAnalysis.balanceScore, Modifier.weight(1f)
+                    InclinationChip(
+                        "Pelvis", report.typicalInclinations[GaitMetricKey.FRONT_PELVIS], Modifier.weight(1f)
                     )
-                    ScoreChip(
-                        "Symmetry", latestSession.gaitAnalysis.symmetryScore, Modifier.weight(1f)
+                    InclinationChip(
+                        "Knees", report.typicalInclinations[GaitMetricKey.FRONT_KNEES], Modifier.weight(1f)
                     )
                 }
 
                 Spacer(Modifier.height(12.dp))
             }
 
-            // ── Mini charts — each panel reflects its own server data ─────
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Left: stabilogram (COP trajectory) from insole pressure data
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "COP Trajectory",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    val pressureData = latestSession?.pressureData
-                    if (pressureData != null) {
-                        StabilogramMiniChart(
-                            copPoints = pressureData.copTrajectory,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp)
-                        )
-                    } else {
-                        NoInsolesMiniCard(
-                            onOrderInsoles = onOrderInsoles,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp)
-                        )
-                    }
-                }
+            // ── Insole pressure — the live streaming feed from the smart insoles ──
+            // Scrolls like the server's ADS1115 chart once the insoles are connected.
+            Text(
+                if (insolesConnected) "Insole pressure · live" else "Insole pressure",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            if (insolesConnected) {
+                LivePressureChart(
+                    samples = pressureStream,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .testTag("home-insole-live-chart")
+                )
+            } else {
+                NoInsolesMiniCard(
+                    onOrderInsoles = onOrderInsoles,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                )
+            }
 
-                // Right: body deviation from the scanner (pose) data
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "Body Deviation",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    if (latestSession != null) {
-                        DeviationMiniChart(
-                            series = latestSession.gaitAnalysis.positionSeries,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp)
-                        )
-                    } else {
-                        MakeAScanMiniCard(
-                            onStartScan = onStartScan,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp)
-                        )
-                    }
-                }
+            Spacer(Modifier.height(12.dp))
+
+            // ── Body-line tilt from the scanner (pose) data ──
+            Text(
+                "Body-Line Tilt",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            if (latestSession != null) {
+                InclinationMiniChart(
+                    report = latestSession.report,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                )
+            } else {
+                MakeAScanMiniCard(
+                    onStartScan = onStartScan,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ScoreChip(label: String, score: Float, modifier: Modifier = Modifier) {
+private fun InclinationChip(label: String, angleDeg: Float?, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(10.dp),
@@ -429,7 +455,7 @@ private fun ScoreChip(label: String, score: Float, modifier: Modifier = Modifier
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                "${score.toInt()}%",
+                angleDeg?.let { "%.1f°".format(it) } ?: "—",
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -442,114 +468,38 @@ private fun ScoreChip(label: String, score: Float, modifier: Modifier = Modifier
     }
 }
 
-// COP trajectory on a 2-D plane — lissajous ellipse in primary color
+// Per-body-line mean inclination (degrees) as vertical bars on a fixed 0–15° scale
 @Composable
-private fun StabilogramMiniChart(copPoints: List<CopPoint>, modifier: Modifier = Modifier) {
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
-    val axisColor = NeutralMid.copy(alpha = 0.35f)
-
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val cx = w / 2f
-        val cy = h / 2f
-
-        drawRect(color = surfaceVariant, size = size)
-
-        // axis lines
-        val axisStroke = 1.dp.toPx()
-        drawLine(axisColor, Offset(0f, cy), Offset(w, cy), strokeWidth = axisStroke)
-        drawLine(axisColor, Offset(cx, 0f), Offset(cx, h), strokeWidth = axisStroke)
-
-        if (copPoints.size < 2) return@Canvas
-
-        // scale: ±35mm → width, ±25mm → height
-        val scaleX = w / 70f
-        val scaleY = h / 50f
-
-        val path = Path()
-        copPoints.forEachIndexed { index, pt ->
-            val px = cx + pt.x * scaleX
-            val py = cy - pt.y * scaleY   // flip Y so +y = up
-            if (index == 0) path.moveTo(px, py) else path.lineTo(px, py)
-        }
-        drawPath(
-            path = path,
-            color = primaryColor.copy(alpha = 0.8f),
-            style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
-
-        // start dot (green) and end dot (red)
-        val first = copPoints.first()
-        val last = copPoints.last()
-        drawCircle(
-            ChartStartGreen,
-            radius = 3.dp.toPx(),
-            center = Offset(cx + first.x * scaleX, cy - first.y * scaleY)
-        )
-        drawCircle(
-            ChartEndRed,
-            radius = 3.dp.toPx(),
-            center = Offset(cx + last.x * scaleX, cy - last.y * scaleY)
-        )
-    }
-}
-
-// Lateral (red) and AP (blue) body deviation over time
-@Composable
-private fun DeviationMiniChart(series: List<BodyPosition>, modifier: Modifier = Modifier) {
-    val primary = MaterialTheme.colorScheme.primary
-    val errorColor = MaterialTheme.colorScheme.error
+private fun InclinationMiniChart(report: GaitReport, modifier: Modifier = Modifier) {
+    val barColor = MaterialTheme.colorScheme.primary
     val surfaceColor = MaterialTheme.colorScheme.surfaceVariant
+    val axisColor = NeutralMid.copy(alpha = 0.35f)
+    val measured = GaitMetricKey.entries.mapNotNull { key ->
+        report.typicalInclinations[key]?.let { key to it }
+    }
 
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        val midY = h / 2f
-
         drawRect(color = surfaceColor, size = size)
 
-        // zero line
-        drawLine(
-            color = ChartStartGreen,
-            start = Offset(0f, midY),
-            end = Offset(w, midY),
-            strokeWidth = 1.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))
-        )
+        val baseline = h - 4.dp.toPx()
+        drawLine(axisColor, Offset(0f, baseline), Offset(w, baseline), strokeWidth = 1.dp.toPx())
+        if (measured.isEmpty()) return@Canvas
 
-        if (series.size < 2) return@Canvas
-
-        val maxDev = 12f  // cm range
-        val scaleY = (h / 2f) / maxDev
-        val scaleX = w / (series.size - 1).toFloat().coerceAtLeast(1f)
-
-        // lateral deviation (X, red)
-        val pathX = Path()
-        series.forEachIndexed { i, pt ->
-            val px = i * scaleX
-            val py = midY - pt.deviationX * scaleY
-            if (i == 0) pathX.moveTo(px, py) else pathX.lineTo(px, py)
+        val maxDeg = 15f
+        val slot = w / measured.size
+        val barW = slot * 0.5f
+        measured.forEachIndexed { i, (_, deg) ->
+            val frac = (deg / maxDeg).coerceIn(0f, 1f)
+            val barH = (baseline - 4.dp.toPx()) * frac
+            val left = i * slot + (slot - barW) / 2f
+            drawRect(
+                color = barColor.copy(alpha = 0.85f),
+                topLeft = Offset(left, baseline - barH),
+                size = androidx.compose.ui.geometry.Size(barW, barH)
+            )
         }
-        drawPath(
-            pathX,
-            errorColor.copy(alpha = 0.85f),
-            style = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
-
-        // AP deviation (Y, blue/primary)
-        val pathY = Path()
-        series.forEachIndexed { i, pt ->
-            val px = i * scaleX
-            val py = midY - pt.deviationY * scaleY
-            if (i == 0) pathY.moveTo(px, py) else pathY.lineTo(px, py)
-        }
-        drawPath(
-            pathY,
-            primary.copy(alpha = 0.85f),
-            style = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
     }
 }
 
@@ -657,6 +607,73 @@ private fun HomeTopBar(
         containerColor = MaterialTheme.colorScheme.background
     )
     )
+}
+
+// ── Insole-arrival push notification ───────────────────────────────────────────
+// Mimics a delivery push: tapping it (or "View insoles") connects the insoles so the
+// COP card below starts rendering live pressure data.
+@Composable
+private fun InsolePushBanner(
+    push: InsolePush,
+    onOpen: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        onClick = onOpen,
+        modifier = modifier.fillMaxWidth().testTag("home-insole-push"),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = StatusBlueBg),
+        border = BorderStroke(1.dp, StatusBlue.copy(alpha = 0.3f))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.Top
+        ) {
+            Surface(shape = CircleShape, color = StatusBlue.copy(alpha = 0.15f)) {
+                Icon(
+                    imageVector = Icons.Outlined.Notifications,
+                    contentDescription = null,
+                    tint = StatusBlue,
+                    modifier = Modifier.padding(8.dp).size(20.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(push.title, style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    push.body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = onOpen,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            "View insoles",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = StatusBlue
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    TextButton(
+                        onClick = onDismiss,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            "Dismiss",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ── New order banner ──────────────────────────────────────────────────────────

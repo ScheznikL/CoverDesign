@@ -46,7 +46,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -56,9 +55,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.coverdesign.domain.model.BodyPosition
 import com.example.coverdesign.domain.model.CopPoint
 import com.example.coverdesign.domain.model.FootPressureMap
+import com.example.coverdesign.domain.model.GaitMetricKey
+import com.example.coverdesign.domain.model.GaitReport
 import com.example.coverdesign.domain.model.GaitSession
 import com.example.coverdesign.ui.components.EventHandler
 import com.example.coverdesign.ui.theme.AppTheme
@@ -181,7 +181,12 @@ private fun ScoreTrendCard(sessions: List<GaitSession>, modifier: Modifier = Mod
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Score Trend", style = MaterialTheme.typography.titleSmall)
+            Text("Inclination Trend", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Mean body-line tilt per session · lower is better",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Spacer(Modifier.height(8.dp))
 
             // Legend
@@ -189,9 +194,9 @@ private fun ScoreTrendCard(sessions: List<GaitSession>, modifier: Modifier = Mod
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.padding(bottom = 8.dp)
             ) {
-                LegendDot(StatusBlue, "Posture")
-                LegendDot(StatusGreen, "Balance")
-                LegendDot(StatusPurple, "Symmetry")
+                LegendDot(StatusBlue, "Shoulders")
+                LegendDot(StatusGreen, "Pelvis")
+                LegendDot(StatusPurple, "Knees")
             }
 
             ScoreTrendChart(
@@ -241,9 +246,12 @@ private fun ScoreTrendChart(sessions: List<GaitSession>, modifier: Modifier = Mo
         val orderedSessions = sessions.reversed()
         val n = orderedSessions.size.coerceAtLeast(1)
 
-        // Grid lines at 25, 50, 75, 100
-        listOf(25f, 50f, 75f, 100f).forEach { score ->
-            val y = padTop + chartH * (1f - score / 100f)
+        // Fixed degree scale so sessions stay visually comparable.
+        val maxDeg = 15f
+
+        // Grid lines at 5°, 10°, 15°
+        listOf(5f, 10f, 15f).forEach { deg ->
+            val y = padTop + chartH * (1f - deg / maxDeg)
             drawLine(gridColor, Offset(padLeft, y), Offset(w, y), strokeWidth = 1.dp.toPx())
         }
 
@@ -260,23 +268,27 @@ private fun ScoreTrendChart(sessions: List<GaitSession>, modifier: Modifier = Mo
         fun xPos(i: Int) =
             padLeft + if (n == 1) chartW / 2f else i.toFloat() / (n - 1).toFloat() * chartW
 
-        fun yPos(score: Float) = padTop + chartH * (1f - score / 100f)
+        fun yPos(deg: Float) = padTop + chartH * (1f - (deg / maxDeg).coerceIn(0f, 1f))
 
-        // Draw the three score lines
-        data class Metric(val color: Color, val scores: List<Float>)
+        // Draw a line per front body-line metric (degrees).
+        data class Metric(val color: Color, val key: GaitMetricKey)
 
         val metrics = listOf(
-            Metric(postureColor, orderedSessions.map { it.gaitAnalysis.postureScore }),
-            Metric(balanceColor, orderedSessions.map { it.gaitAnalysis.balanceScore }),
-            Metric(symmetryColor, orderedSessions.map { it.gaitAnalysis.symmetryScore })
+            Metric(postureColor, GaitMetricKey.FRONT_SHOULDERS),
+            Metric(balanceColor, GaitMetricKey.FRONT_PELVIS),
+            Metric(symmetryColor, GaitMetricKey.FRONT_KNEES)
         )
 
         metrics.forEach { metric ->
+            // Sessions that did not measure this metric are skipped (no invented points).
+            val points = orderedSessions.mapIndexedNotNull { i, session ->
+                session.report.typicalInclinations[metric.key]?.let { i to it }
+            }
             val path = Path()
-            metric.scores.forEachIndexed { i, score ->
+            points.forEachIndexed { idx, (i, deg) ->
                 val x = xPos(i)
-                val y = yPos(score)
-                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                val y = yPos(deg)
+                if (idx == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
             drawPath(
                 path,
@@ -285,13 +297,9 @@ private fun ScoreTrendChart(sessions: List<GaitSession>, modifier: Modifier = Mo
             )
 
             // Dots
-            metric.scores.forEachIndexed { i, score ->
-                drawCircle(
-                    metric.color,
-                    radius = 4.dp.toPx(),
-                    center = Offset(xPos(i), yPos(score))
-                )
-                drawCircle(NeutralWhite, radius = 2.dp.toPx(), center = Offset(xPos(i), yPos(score)))
+            points.forEach { (i, deg) ->
+                drawCircle(metric.color, radius = 4.dp.toPx(), center = Offset(xPos(i), yPos(deg)))
+                drawCircle(NeutralWhite, radius = 2.dp.toPx(), center = Offset(xPos(i), yPos(deg)))
             }
         }
     }
@@ -341,24 +349,18 @@ private fun SessionCard(
 
             Spacer(Modifier.height(8.dp))
 
-            // Score row
+            // Front body-line inclinations (degrees)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MiniScoreBadge("Posture", session.gaitAnalysis.postureScore, StatusBlue)
-                MiniScoreBadge("Balance", session.gaitAnalysis.balanceScore, StatusGreen)
-                MiniScoreBadge("Symmetry", session.gaitAnalysis.symmetryScore, StatusPurple)
+                AngleBadge("Shoulders", GaitMetricKey.FRONT_SHOULDERS, StatusBlue, session.report)
+                AngleBadge("Pelvis", GaitMetricKey.FRONT_PELVIS, StatusGreen, session.report)
+                AngleBadge("Knees", GaitMetricKey.FRONT_KNEES, StatusPurple, session.report)
             }
             Spacer(Modifier.height(4.dp))
+            // Back body-line inclinations (degrees)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MiniValueBadge(
-                    label = "Kyphosis",
-                    value = "%.1f°".format((100f - session.gaitAnalysis.postureScore) * 0.2f),
-                    color = AccentAmber
-                )
-                MiniValueBadge(
-                    label = "Scoliosis",
-                    value = "%.0f%%".format(100f - session.gaitAnalysis.scoliosisScore),
-                    color = AccentCoral
-                )
+                AngleBadge("Shoulders", GaitMetricKey.BACK_SHOULDERS, AccentAmber, session.report)
+                AngleBadge("Pelvis", GaitMetricKey.BACK_PELVIS, AccentCoral, session.report)
+                AngleBadge("Spine", GaitMetricKey.BACK_SPINE, StatusPurple, session.report)
             }
 
             // Expanded detail
@@ -403,35 +405,22 @@ private fun SessionCard(
                             }
                         }
 
-                        // Body deviation
+                        // Body-line inclination
                         Column(
                             modifier = Modifier.weight(1f),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                "Body Deviation",
+                                "Body-Line Inclination",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(Modifier.height(4.dp))
-                            DeviationChart(
-                                series = session.gaitAnalysis.positionSeries,
+                            InclinationBars(
+                                report = session.report,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(160.dp)
-                            )
-                        }
-                    }
-
-                    // Abnormalities
-                    if (session.gaitAnalysis.abnormalities.isNotEmpty()) {
-                        Spacer(Modifier.height(10.dp))
-                        Text("Notes", style = MaterialTheme.typography.labelMedium)
-                        session.gaitAnalysis.abnormalities.forEach { note ->
-                            Text(
-                                "· $note",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -450,23 +439,26 @@ private fun SessionCard(
     }
 }
 
+/** Mean-absolute inclination for one body line, in degrees. Dimmed when it lacks enough data to trend. */
 @Composable
-private fun MiniScoreBadge(label: String, score: Float, color: Color) {
-    Surface(shape = RoundedCornerShape(6.dp), color = color.copy(alpha = 0.12f)) {
+private fun AngleBadge(label: String, key: GaitMetricKey, color: Color, report: GaitReport) {
+    val deg = report.typicalInclinations[key] ?: return
+    val alpha = if (key in report.qualifiedMetrics) 1f else 0.5f
+    Surface(shape = RoundedCornerShape(6.dp), color = color.copy(alpha = 0.12f * alpha)) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                "${score.toInt()}%",
+                "%.1f°".format(deg),
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = color
+                color = color.copy(alpha = alpha)
             )
             Text(
                 label,
                 style = MaterialTheme.typography.labelSmall,
-                color = color.copy(alpha = 0.8f)
+                color = color.copy(alpha = 0.8f * alpha)
             )
         }
     }
@@ -524,64 +516,70 @@ private fun StabilogramChart(copPoints: List<CopPoint>, modifier: Modifier = Mod
     }
 }
 
+/** Horizontal bars of the session's mean-absolute inclination per measured body line (degrees). */
 @Composable
-private fun DeviationChart(series: List<BodyPosition>, modifier: Modifier = Modifier) {
-    val primary = MaterialTheme.colorScheme.primary
-    val errorColor = MaterialTheme.colorScheme.error
-    val surfaceColor = MaterialTheme.colorScheme.surfaceVariant
-    val gridColor = NeutralMid.copy(alpha = 0.2f)
+private fun InclinationBars(report: GaitReport, modifier: Modifier = Modifier) {
+    val barColor = MaterialTheme.colorScheme.primary
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val maxDeg = 15f
 
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val midY = h / 2f
+    // Fixed order so bars stay stable across sessions; only measured metrics are shown.
+    val measured = GaitMetricKey.entries.mapNotNull { key ->
+        report.typicalInclinations[key]?.let { key to it }
+    }
 
-        drawRect(color = surfaceColor, size = size)
-
-        // Grid at ±5 and ±10 cm
-        val maxDev = 12f
-        listOf(-10f, -5f, 5f, 10f).forEach { level ->
-            val y = midY - level / maxDev * midY
-            drawLine(gridColor, Offset(0f, y), Offset(w, y), strokeWidth = 1.dp.toPx())
+    if (measured.isEmpty()) {
+        Surface(modifier = modifier, shape = RoundedCornerShape(10.dp), color = trackColor) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    "No measured body lines",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = labelColor
+                )
+            }
         }
+        return
+    }
 
-        // Zero line
-        drawLine(
-            color = ChartStartGreen,
-            start = Offset(0f, midY),
-            end = Offset(w, midY),
-            strokeWidth = 1.5.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 4f))
-        )
-
-        if (series.size < 2) return@Canvas
-
-        val scaleY = midY / maxDev
-        val scaleX = w / (series.size - 1).toFloat().coerceAtLeast(1f)
-
-        val pathX = Path()
-        series.forEachIndexed { i, pt ->
-            val px = i * scaleX
-            val py = midY - pt.deviationX * scaleY
-            if (i == 0) pathX.moveTo(px, py) else pathX.lineTo(px, py)
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        measured.forEach { (key, deg) ->
+            val qualified = key in report.qualifiedMetrics
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(key.label, style = MaterialTheme.typography.labelSmall, color = labelColor)
+                    Text(
+                        "%.1f°".format(deg),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (qualified) barColor else labelColor
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(trackColor)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth((deg / maxDeg).coerceIn(0f, 1f))
+                            .fillMaxHeight()
+                            .background(barColor.copy(alpha = if (qualified) 0.8f else 0.4f))
+                    )
+                }
+            }
         }
-        drawPath(
-            pathX,
-            errorColor.copy(alpha = 0.85f),
-            style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
-
-        val pathY = Path()
-        series.forEachIndexed { i, pt ->
-            val px = i * scaleX
-            val py = midY - pt.deviationY * scaleY
-            if (i == 0) pathY.moveTo(px, py) else pathY.lineTo(px, py)
-        }
-        drawPath(
-            pathY,
-            primary.copy(alpha = 0.85f),
-            style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
     }
 }
 
@@ -603,28 +601,6 @@ private fun NoInsolesPlaceholder(modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 12.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun MiniValueBadge(label: String, value: String, color: Color) {
-    Surface(shape = MaterialTheme.shapes.extraSmall, color = color.copy(alpha = 0.12f)) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                value,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = color
-            )
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                color = color.copy(alpha = 0.8f)
             )
         }
     }

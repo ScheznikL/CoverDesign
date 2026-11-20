@@ -7,8 +7,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import com.example.coverdesign.domain.model.OrderCategory
-import com.example.coverdesign.domain.model.BodyPosition
-import com.example.coverdesign.domain.model.GaitAnalysisResult
+import com.example.coverdesign.domain.model.GaitAcquisitionSource
+import com.example.coverdesign.domain.model.GaitMeasurementMethod
+import com.example.coverdesign.domain.model.GaitMetricKey
+import com.example.coverdesign.domain.model.GaitReport
 import com.example.coverdesign.domain.model.GaitSession as ServerGaitSession
 import com.example.coverdesign.domain.model.OrderListItem
 import com.example.coverdesign.domain.model.OrderStatus
@@ -216,7 +218,7 @@ class HomeScreenTest {
         composeTestRule.onNodeWithTag("home-server-rehab-loading").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Loading rehabilitation data…").assertIsDisplayed()
         composeTestRule.onNodeWithTag("home-server-rehab-summary").assertDoesNotExist()
-        composeTestRule.onNodeWithText("Posture").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Shoulders").assertDoesNotExist()
     }
 
     @Test
@@ -224,10 +226,26 @@ class HomeScreenTest {
         val serverSession = ServerGaitSession(
             id = "server-session", patientUid = "test-patient", timestamp = 1_000,
             durationSeconds = 8,
-            gaitAnalysis = GaitAnalysisResult(
-                postureScore = 61f, balanceScore = 72f, symmetryScore = 83f, scoliosisScore = 64f,
-                positionSeries = listOf(BodyPosition(0, 1f, -1f), BodyPosition(100, 2f, -2f)),
-                abnormalities = emptyList()),
+            report = GaitReport(
+                typicalInclinations = mapOf(
+                    GaitMetricKey.FRONT_SHOULDERS to 6.1f,
+                    GaitMetricKey.FRONT_PELVIS to 7.2f,
+                    GaitMetricKey.FRONT_KNEES to 8.3f,
+                ),
+                sampleCounts = mapOf(
+                    GaitMetricKey.FRONT_SHOULDERS to 80,
+                    GaitMetricKey.FRONT_PELVIS to 80,
+                    GaitMetricKey.FRONT_KNEES to 80,
+                ),
+                qualifiedMetrics = setOf(
+                    GaitMetricKey.FRONT_SHOULDERS, GaitMetricKey.FRONT_PELVIS, GaitMetricKey.FRONT_KNEES,
+                ),
+                measurementMethod = GaitMeasurementMethod.POSE,
+                acquisitionSource = GaitAcquisitionSource.VIDEO,
+                protocolVersion = 7,
+                acceptedFrames = 100, rejectedFrames = 5,
+                frontValidDurationMs = 4_000, backValidDurationMs = 4_000,
+                comparisonGroupId = "mock"),
             pressureData = null)
         composeTestRule.setContent {
             HomeContent(state = HomeUiState(rehabSessions = listOf(serverSession)), onAction = {})
@@ -235,9 +253,9 @@ class HomeScreenTest {
         composeTestRule.onNodeWithText("No gait measurements yet").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag("home-gait-FRONT-SHOULDERS-angle").assertDoesNotExist()
         composeTestRule.onNodeWithTag("home-server-rehab-summary").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("61%").assertIsDisplayed()
-        composeTestRule.onNodeWithText("72%").assertIsDisplayed()
-        composeTestRule.onNodeWithText("83%").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Body Deviation").assertExists()
+        composeTestRule.onNodeWithText("6.1°").assertIsDisplayed()
+        composeTestRule.onNodeWithText("7.2°").assertIsDisplayed()
+        composeTestRule.onNodeWithText("8.3°").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Body-Line Tilt").assertExists()
     }
 }

@@ -1,6 +1,7 @@
 package com.example.coverdesign.data.remote.service
 
 import com.example.coverdesign.data.dto.GaitProfileDto
+import com.example.coverdesign.data.dto.GaitSessionDto
 import com.example.coverdesign.data.dto.RehabResponseDto
 import com.example.coverdesign.data.dto.RehabTaskDto
 import com.example.coverdesign.data.dto.SubmitRehabSessionDto
@@ -32,4 +33,10 @@ class RehabApiService(private val client: HttpClient) {
         client.get(
             ApiConstants.Endpoints.REHAB_SESSION_STATUS.replace("{taskId}", taskId)
         ).body()
+
+    /** Uploads a client-computed session; server resolves the owner from auth. Echoes the stored session. */
+    suspend fun postSessionData(body: GaitSessionDto): GaitSessionDto =
+        client.post(ApiConstants.Endpoints.REHAB_SESSION_DATA) {
+            setBody(body)
+        }.body()
 }

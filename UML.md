@@ -56,15 +56,15 @@ classDiagram
         +id String
         +patientUid String
         +timestamp Long
-        +gaitAnalysis GaitAnalysisResult
+        +report GaitReport
         +pressureData InsoleData
     }
-    class GaitAnalysisResult {
-        +postureScore Int
-        +balanceScore Int
-        +symmetryScore Int
-        +positionSeries List~BodyPosition~
-        +abnormalities List~String~
+    class GaitReport {
+        +typicalInclinations Map~GaitMetricKey, Float~
+        +sampleCounts Map~GaitMetricKey, Int~
+        +qualifiedMetrics Set~GaitMetricKey~
+        +measurementMethod GaitMeasurementMethod
+        +acquisitionSource GaitAcquisitionSource
     }
     class InsoleData {
         +leftFoot FootPressureMap
@@ -131,7 +131,7 @@ classDiagram
     ModelPreviewScreen --> ModelPreviewViewModel
     ModifiableModelPreviewScreen --> ModelPreviewViewModel
 
-    GaitSession --> GaitAnalysisResult
+    GaitSession --> GaitReport
     GaitSession --> InsoleData
     DoctorRecommendation --> RecommendationTag
     RehabViewModel --|> BaseViewModel

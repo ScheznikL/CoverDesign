@@ -1,31 +1,36 @@
 package com.example.coverdesign.ui.viewmodel
 
-import com.example.coverdesign.domain.model.BodyPosition
 import com.example.coverdesign.domain.model.CopPoint
 import com.example.coverdesign.domain.model.DoctorRecommendation
 import com.example.coverdesign.domain.model.FootPressureMap
-import com.example.coverdesign.domain.model.GaitAnalysisResult
+import com.example.coverdesign.domain.model.GaitAcquisitionSource
+import com.example.coverdesign.domain.model.GaitMeasurementMethod
+import com.example.coverdesign.domain.model.GaitMetricKey
+import com.example.coverdesign.domain.model.GaitReport
 import com.example.coverdesign.domain.model.GaitSession
 import com.example.coverdesign.domain.model.InsoleData
 import com.example.coverdesign.domain.model.RecommendationTag
 import com.example.coverdesign.domain.util.currentEpochMillis
 import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.exp
 import kotlin.math.sin
 
 object RehabMockData {
 
     private val DAY_MS = 86_400_000L
 
+    // A plausible, fixed 64-hex comparison group so all mock sessions trend together.
+    private const val MOCK_COMPARISON_GROUP =
+        "0000000000000000000000000000000000000000000000000000000000000000"
+
     fun generateSessions(): List<GaitSession> {
         val now = currentEpochMillis()
+        // Inclination angles (degrees) DECREASE toward the newest session = improving posture.
         return listOf(
-            buildSession("s1", now,            postureScore = 85f, balanceScore = 87f, symmetryScore = 83f, scoliosisScore = 88f, durationSec = 420),
-            buildSession("s2", now - 7 * DAY_MS,  postureScore = 78f, balanceScore = 80f, symmetryScore = 76f, scoliosisScore = 82f, durationSec = 390),
-            buildSession("s3", now - 14 * DAY_MS, postureScore = 70f, balanceScore = 74f, symmetryScore = 72f, scoliosisScore = 75f, durationSec = 360),
-            buildSession("s4", now - 21 * DAY_MS, postureScore = 63f, balanceScore = 68f, symmetryScore = 65f, scoliosisScore = 68f, durationSec = 330),
-            buildSession("s5", now - 28 * DAY_MS, postureScore = 55f, balanceScore = 60f, symmetryScore = 58f, scoliosisScore = 60f, durationSec = 300),
+            buildSession("s1", now,               baseAngle = 2.5f, durationSec = 420),
+            buildSession("s2", now - 7 * DAY_MS,  baseAngle = 3.8f, durationSec = 390),
+            buildSession("s3", now - 14 * DAY_MS, baseAngle = 5.2f, durationSec = 360),
+            buildSession("s4", now - 21 * DAY_MS, baseAngle = 6.6f, durationSec = 330),
+            buildSession("s5", now - 28 * DAY_MS, baseAngle = 8.0f, durationSec = 300),
         )
     }
 
@@ -38,19 +43,6 @@ object RehabMockData {
                 timeMs = i * 100L,
                 x = (30.0 * sin(t)).toFloat(),
                 y = (20.0 * sin(2.0 * t + PI / 4.0)).toFloat()
-            )
-        }
-    }
-
-    // Body deviation: damped sine (patient correcting posture over a session)
-    private fun generateDeviationSeries(n: Int = 60): List<BodyPosition> {
-        val twoPI = 2.0 * PI
-        return (0 until n).map { i ->
-            val t = i.toDouble() / n.toDouble()
-            BodyPosition(
-                timeMs = i * 300L,
-                deviationX = (10.0 * exp(-2.0 * t) * sin(6.0 * PI * t)).toFloat(),
-                deviationY = (6.0 * exp(-1.5 * t) * cos(5.0 * PI * t)).toFloat()
             )
         }
     }
@@ -78,30 +70,43 @@ object RehabMockData {
     private fun buildSession(
         id: String,
         timestamp: Long,
-        postureScore: Float,
-        balanceScore: Float,
-        symmetryScore: Float,
-        scoliosisScore: Float,
+        baseAngle: Float,
         durationSec: Int
-    ) = GaitSession(
-        id = id,
-        patientUid = "mock_patient",
-        timestamp = timestamp,
-        durationSeconds = durationSec,
-        gaitAnalysis = GaitAnalysisResult(
-            postureScore = postureScore,
-            balanceScore = balanceScore,
-            symmetryScore = symmetryScore,
-            scoliosisScore = scoliosisScore,
-            positionSeries = generateDeviationSeries(),
-            abnormalities = if (postureScore < 70f) listOf("Slight anterior lean detected") else emptyList()
-        ),
-        pressureData = InsoleData(
-            leftFoot = FootPressureMap(heel = 0.35f, midfoot = 0.15f, forefoot = 0.35f, toes = 0.15f),
-            rightFoot = FootPressureMap(heel = 0.33f, midfoot = 0.17f, forefoot = 0.34f, toes = 0.16f),
-            copTrajectory = generateCopTrajectory(),
-            stepCount = (durationSec / 0.6f).toInt(),
-            cadence = 100f
+    ): GaitSession {
+        // Per-metric mean-absolute inclination derived from the session's base angle.
+        val inclinations = mapOf(
+            GaitMetricKey.FRONT_SHOULDERS to baseAngle,
+            GaitMetricKey.FRONT_PELVIS to baseAngle * 0.8f,
+            GaitMetricKey.FRONT_KNEES to baseAngle * 1.1f,
+            GaitMetricKey.BACK_SHOULDERS to baseAngle * 0.9f,
+            GaitMetricKey.BACK_PELVIS to baseAngle * 0.7f,
+            GaitMetricKey.BACK_SPINE to baseAngle * 1.2f,
         )
-    )
+        return GaitSession(
+            id = id,
+            patientUid = "mock_patient",
+            timestamp = timestamp,
+            durationSeconds = durationSec,
+            report = GaitReport(
+                typicalInclinations = inclinations,
+                sampleCounts = inclinations.keys.associateWith { 80 },
+                qualifiedMetrics = inclinations.keys,
+                measurementMethod = GaitMeasurementMethod.MARKERS,
+                acquisitionSource = GaitAcquisitionSource.VIDEO,
+                protocolVersion = 7,
+                acceptedFrames = 500,
+                rejectedFrames = 40,
+                frontValidDurationMs = durationSec * 500L,
+                backValidDurationMs = durationSec * 500L,
+                comparisonGroupId = MOCK_COMPARISON_GROUP
+            ),
+            pressureData = InsoleData(
+                leftFoot = FootPressureMap(heel = 0.35f, midfoot = 0.15f, forefoot = 0.35f, toes = 0.15f),
+                rightFoot = FootPressureMap(heel = 0.33f, midfoot = 0.17f, forefoot = 0.34f, toes = 0.16f),
+                copTrajectory = generateCopTrajectory(),
+                stepCount = (durationSec / 0.6f).toInt(),
+                cadence = 100f
+            )
+        )
+    }
 }

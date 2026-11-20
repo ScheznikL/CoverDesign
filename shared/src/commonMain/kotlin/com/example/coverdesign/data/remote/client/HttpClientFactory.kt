@@ -16,12 +16,35 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
+import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 
+class ApiClient( //TODO temp
+    private val httpClient: HttpClient,
+    private val baseUrl: String
+) {
+    suspend fun testConnection(): Result<String> = runCatching {
+        val response = httpClient.get("$baseUrl/openapi.json")
+        println("Connection successful: ${response.status}")
+        response.bodyAsText()
+    }.onFailure { e ->
+        e.printStackTrace()
+    }
+}
+
+object TempApiClientFactory {
+    fun create(
+        httpClient: HttpClient,
+        baseUrl: String
+    ): ApiClient = ApiClient(
+        httpClient = httpClient,
+        baseUrl = baseUrl.trimEnd('/')
+    )
+}
 fun createHttpClient(tokenStorage: TokenStorage): HttpClient = HttpClient {
 
     // ── JSON ────────────────────────────────────────────────────────────────

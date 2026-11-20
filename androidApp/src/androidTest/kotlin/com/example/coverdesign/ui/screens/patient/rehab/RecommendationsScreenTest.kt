@@ -1,11 +1,9 @@
 package com.example.coverdesign.ui.screens.patient.rehab
 
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.*
+import com.example.coverdesign.domain.model.DoctorRecommendation
+import com.example.coverdesign.domain.model.RecommendationTag
 import com.example.coverdesign.ui.viewmodel.RecommendationsAction
 import com.example.coverdesign.ui.viewmodel.RecommendationsUiState
 import com.example.coverdesign.ui.viewmodel.RehabMockData
@@ -134,6 +132,41 @@ class RecommendationsScreenTest {
             )
         }
         composeTestRule.onNodeWithText("Progress Coefficients").assertDoesNotExist()
+    }
+
+    private fun recs(n: Int) = (1..n).map {
+        DoctorRecommendation(
+            id = "r$it", doctorName = "Dr. $it", timestampMs = 1000L * it,
+            tag = RecommendationTag.INSOLE_BASED, text = "Recommendation number $it"
+        )
+    }
+
+    @Test
+    fun showAllButtonRevealsRecommendationsBeyondTwo() {
+        composeTestRule.setContent {
+            RecommendationsContent(
+                state = RecommendationsUiState(patientName = "P", recommendations = recs(3)),
+                onAction = {}
+            )
+        }
+        // Collapsed: only the first two cards and a "Show all (3)" button.
+        composeTestRule.onNodeWithText("Recommendation number 3").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Show all (3)").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Recommendation number 3").performScrollTo().assertIsDisplayed()
+        // Expanded: toggle collapses again.
+        composeTestRule.onNodeWithText("Show less").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Recommendation number 3").assertDoesNotExist()
+    }
+
+    @Test
+    fun noShowAllButtonWithTwoOrFewerRecommendations() {
+        composeTestRule.setContent {
+            RecommendationsContent(
+                state = RecommendationsUiState(patientName = "P", recommendations = recs(2)),
+                onAction = {}
+            )
+        }
+        composeTestRule.onNodeWithText("Show all (2)").assertDoesNotExist()
     }
 
     @Test

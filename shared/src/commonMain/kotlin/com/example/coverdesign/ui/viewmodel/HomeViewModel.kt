@@ -1,6 +1,7 @@
 package com.example.coverdesign.ui.viewmodel
 
 import androidx.lifecycle.viewModelScope
+import com.example.coverdesign.data.remote.client.ApiClient
 import com.example.coverdesign.domain.model.GaitSession
 import com.example.coverdesign.domain.model.OrderListItem
 import com.example.coverdesign.domain.repo.FireAuthRepository
@@ -10,9 +11,11 @@ import com.example.coverdesign.domain.usecase.LogoutUseCase
 import com.example.coverdesign.domain.usecase.SyncOrdersUseCase
 import com.example.coverdesign.domain.util.Resource
 import com.example.coverdesign.domain.util.currentEpochMillis
+import com.example.coverdesign.ui.viewmodel.HomeViewModel.Companion.NEW_USER_WINDOW_MS
 import com.example.coverdesign.ui.viewmodel.base.BaseViewModel
 import com.example.coverdesign.ui.viewmodel.base.UiEvent
 import com.example.coverdesign.ui.viewmodel.base.UiState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 class HomeViewModel(
@@ -20,8 +23,15 @@ class HomeViewModel(
     private val getRehabData : GetRehabDataUseCase,
     private val authRepo     : FireAuthRepository,
     private val logout       : LogoutUseCase,
-    private val syncOrders   : SyncOrdersUseCase
+    private val syncOrders   : SyncOrdersUseCase,
+    private val apiClient: ApiClient,
 ) : BaseViewModel<HomeUiState, HomeUiEvent>() {
+
+    fun checkBackend(scope: CoroutineScope) {
+        scope.launch {
+            apiClient.testConnection()
+        }
+    }
 
     override fun initialState() = HomeUiState()
 
@@ -31,6 +41,7 @@ class HomeViewModel(
     private var welcomeDismissed = false
 
     init {
+        checkBackend(viewModelScope) //TODO temp
         loadRecentOrders()
         refreshOrders()
         loadUserState()

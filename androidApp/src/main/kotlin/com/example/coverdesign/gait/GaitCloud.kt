@@ -1,6 +1,7 @@
 package com.example.coverdesign.gait
 
 import android.content.Context
+import com.example.coverdesign.domain.repo.RehabRepository
 import com.google.android.gms.tasks.Task
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -29,6 +30,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import org.koin.core.context.GlobalContext
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
@@ -145,12 +147,30 @@ internal class GaitCloudRepository(context: Context,
                 requireOwner(uid)
                 val now = System.currentTimeMillis()
                 prefs.edit().putString("$prefix:${report.sessionId}", gaitDigest(report.toMap().toString())).putLong("$prefix:last", now).apply()
+                // Best-effort REST mirror so the server store stays correct even if its own
+                // video-analysis module is faulty. Never affects the Firestore sync result.
+                localSessions.firstOrNull { it.id == report.sessionId }?.let { mirrorVideoSessionToServer(uid, it) }
                 pending--; publish("Syncing results…", now)
             }
             publish(if (reports.isEmpty() && deleted.isEmpty()) "No saved numerical results to upload." else "Saved results are synced.")
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             if (auth.currentUser?.uid == uid) mutableState.value = mutableState.value.copy(message = cloudError(e))
+        }
+    }
+
+    /**
+     * Mirrors a VIDEO-sourced session's computed report to the rehab REST server
+     * (`POST /rehab/sessions_data`). Fire-and-forget and non-fatal: the session already persists
+     * locally and in Firestore, so a server error or missing dependency is swallowed.
+     */
+    private fun mirrorVideoSessionToServer(uid: String, session: GaitSession) {
+        if (session.acquisitionSource != "VIDEO") return
+        scope.launch {
+            runCatching {
+                GlobalContext.getOrNull()?.get<RehabRepository>()
+                    ?.submitSessionData(session.toRehabDomain(uid))
+            }
         }
     }
 

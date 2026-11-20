@@ -22,7 +22,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.outlined.ArrowDownward
-import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,7 +34,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,7 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.coverdesign.domain.model.DoctorRecommendation
 import com.example.coverdesign.domain.model.FootPressureMap
-import com.example.coverdesign.domain.model.GaitAnalysisResult
+import com.example.coverdesign.domain.model.GaitMetricKey
+import com.example.coverdesign.domain.model.GaitReport
 import com.example.coverdesign.domain.model.RecommendationTag
 import com.example.coverdesign.ui.components.EventHandler
 import com.example.coverdesign.ui.theme.AppTheme
@@ -112,10 +116,10 @@ internal fun RecommendationsContent(
                 hasUnread = state.recommendations.isNotEmpty()
             )
 
-            val analysis = state.latestSession?.gaitAnalysis
-            val prevAnalysis = state.previousSession?.gaitAnalysis
-            if (analysis != null) {
-                CoefficientsSection(current = analysis, previous = prevAnalysis)
+            val report = state.latestSession?.report
+            val prevReport = state.previousSession?.report
+            if (report != null) {
+                CoefficientsSection(current = report, previous = prevReport)
             }
 
             state.latestSession?.pressureData?.let { insoleData ->
@@ -234,146 +238,71 @@ private fun NotificationBell(hasUnread: Boolean) {
 
 @Composable
 private fun CoefficientsSection(
-    current: GaitAnalysisResult,
-    previous: GaitAnalysisResult?
+    current: GaitReport,
+    previous: GaitReport?
 ) {
+    // Representative body lines in a stable order; only measured ones are shown.
+    val keys = listOf(
+        GaitMetricKey.FRONT_SHOULDERS, GaitMetricKey.FRONT_PELVIS, GaitMetricKey.FRONT_KNEES,
+        GaitMetricKey.BACK_SHOULDERS, GaitMetricKey.BACK_PELVIS, GaitMetricKey.BACK_SPINE,
+    ).filter { current.typicalInclinations.containsKey(it) }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            text = "Progress Coefficients",
+            text = "Body-Line Inclinations",
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             color = NeutralText
         )
+        Text(
+            text = "Mean tilt per line (degrees) · lower is better",
+            style = MaterialTheme.typography.labelSmall,
+            color = NeutralTextSecondary
+        )
 
-        val symmetry = current.symmetryScore / 100f
-        val prevSymmetry = previous?.let { it.symmetryScore / 100f }
-        val gaitNormal = current.abnormalities.isEmpty()
-        val prevGaitNormal = previous?.let { it.abnormalities.isEmpty() }
-        val kyphosis = (100f - current.postureScore) * 0.2f
-        val prevKyphosis = previous?.let { (100f - it.postureScore) * 0.2f }
-        val asymmetry = (100f - current.symmetryScore) / 100f
-        val prevAsymmetry = previous?.let { (100f - it.symmetryScore) / 100f }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard(
-                label = "Symmetry Coeff.",
-                value = "%.2f".format(symmetry),
-                statusLabel = if (symmetry >= 0.8f) "Good" else "Watch",
-                statusGood = symmetry >= 0.8f,
-                trendIcon = {
-                    val up = prevSymmetry == null || symmetry >= prevSymmetry
-                    Icon(
-                        imageVector = if (up) Icons.AutoMirrored.Outlined.TrendingUp
-                                      else Icons.Outlined.ArrowDownward,
-                        contentDescription = null,
-                        tint = PatientActiveTeal,
-                        modifier = Modifier.size(14.dp)
-                    )
-                },
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                label = "Gait Classification",
-                value = if (gaitNormal) "Normal" else "Irregular",
-                statusLabel = null,
-                statusGood = gaitNormal,
-                trendIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(if (gaitNormal) PatientActiveTeal else PatientPendingAmber)
-                    )
-                },
-                subLabel = prevGaitNormal?.let {
-                    "Prev: ${if (it) "Normal" else "Irregular"}"
-                },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard(
-                label = "Kyphosis Coeff.",
-                value = "%.1f°".format(kyphosis),
-                statusLabel = if (prevKyphosis != null && kyphosis < prevKyphosis) "Improving"
-                              else if (prevKyphosis != null && kyphosis > prevKyphosis) "Watch"
-                              else "Stable",
-                statusGood = prevKyphosis == null || kyphosis <= prevKyphosis,
-                trendIcon = {
-                    val improving = prevKyphosis == null || kyphosis <= prevKyphosis
-                    Icon(
-                        imageVector = if (improving) Icons.Outlined.ArrowDownward
-                                      else Icons.AutoMirrored.Outlined.TrendingUp,
-                        contentDescription = null,
-                        tint = if (improving) PatientActiveTeal else PatientPendingAmber,
-                        modifier = Modifier.size(14.dp)
-                    )
-                },
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                label = "Asymmetry Coeff.",
-                value = "%.2f".format(asymmetry),
-                statusLabel = if (prevAsymmetry == null || kotlin.math.abs(asymmetry - (prevAsymmetry ?: asymmetry)) < 0.05f) "Stable"
-                              else if (asymmetry < (prevAsymmetry ?: asymmetry)) "Improving"
-                              else "Watch",
-                statusGood = prevAsymmetry == null || asymmetry <= prevAsymmetry,
-                trendIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Remove,
-                        contentDescription = null,
-                        tint = PatientPendingAmber,
-                        modifier = Modifier.size(14.dp)
-                    )
-                },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        val scoliosis = (100f - current.scoliosisScore) / 100f
-        val prevScoliosis = previous?.let { (100f - it.scoliosisScore) / 100f }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard(
-                label = "Balance Score",
-                value = "%.0f%%".format(current.balanceScore),
-                statusLabel = if (current.balanceScore >= 75f) "Good" else "Watch",
-                statusGood = current.balanceScore >= 75f,
-                trendIcon = {
-                    val up = previous == null || current.balanceScore >= previous.balanceScore
-                    Icon(
-                        imageVector = if (up) Icons.AutoMirrored.Outlined.TrendingUp
-                                      else Icons.Outlined.ArrowDownward,
-                        contentDescription = null,
-                        tint = if (up) PatientActiveTeal else PatientPendingAmber,
-                        modifier = Modifier.size(14.dp)
-                    )
-                },
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                label = "Scoliosis Coeff.",
-                value = "%.2f".format(scoliosis),
-                statusLabel = when {
-                    prevScoliosis == null -> "Stable"
-                    scoliosis < prevScoliosis -> "Improving"
-                    scoliosis > prevScoliosis -> "Watch"
-                    else -> "Stable"
-                },
-                statusGood = prevScoliosis == null || scoliosis <= prevScoliosis,
-                trendIcon = {
-                    val improving = prevScoliosis == null || scoliosis <= prevScoliosis
-                    Icon(
-                        imageVector = if (improving) Icons.Outlined.ArrowDownward
-                                      else Icons.AutoMirrored.Outlined.TrendingUp,
-                        contentDescription = null,
-                        tint = if (improving) PatientActiveTeal else PatientPendingAmber,
-                        modifier = Modifier.size(14.dp)
-                    )
-                },
-                modifier = Modifier.weight(1f)
-            )
+        keys.chunked(2).forEach { pair ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                pair.forEach { key ->
+                    InclinationCard(key, current, previous, Modifier.weight(1f))
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
         }
     }
+}
+
+@Composable
+private fun InclinationCard(
+    key: GaitMetricKey,
+    current: GaitReport,
+    previous: GaitReport?,
+    modifier: Modifier = Modifier
+) {
+    val deg = current.typicalInclinations[key] ?: return
+    val prev = previous?.typicalInclinations?.get(key)
+    val improving = prev == null || deg <= prev
+    val status = when {
+        prev == null -> "New"
+        deg < prev - 0.3f -> "Improving"
+        deg > prev + 0.3f -> "Watch"
+        else -> "Stable"
+    }
+    MetricCard(
+        label = key.label,
+        value = "%.1f°".format(deg),
+        statusLabel = status,
+        statusGood = improving,
+        trendIcon = {
+            Icon(
+                imageVector = if (improving) Icons.Outlined.ArrowDownward
+                              else Icons.AutoMirrored.Outlined.TrendingUp,
+                contentDescription = null,
+                tint = if (improving) PatientActiveTeal else PatientPendingAmber,
+                modifier = Modifier.size(14.dp)
+            )
+        },
+        subLabel = prev?.let { "Prev: %.1f°".format(it) },
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -450,16 +379,33 @@ private fun MetricStatusBadge(label: String, good: Boolean) {
 
 // ── Recommendations section ───────────────────────────────────────────────────
 
+private const val COLLAPSED_RECOMMENDATION_COUNT = 2
+
 @Composable
 private fun RecommendationsSection(recommendations: List<DoctorRecommendation>) {
+    var expanded by remember { mutableStateOf(false) }
+    val visible = if (expanded) recommendations else recommendations.take(COLLAPSED_RECOMMENDATION_COUNT)
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             text = "Doctor Recommendations",
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             color = NeutralText
         )
-        recommendations.forEach { rec ->
+        visible.forEach { rec ->
             RecommendationCard(rec)
+        }
+        if (recommendations.size > COLLAPSED_RECOMMENDATION_COUNT) {
+            TextButton(
+                onClick = { expanded = !expanded },
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text(
+                    text = if (expanded) "Show less" else "Show all (${recommendations.size})",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = PatientActiveTeal
+                )
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ import com.example.coverdesign.data.dto.toDomain
 import com.example.coverdesign.data.dto.toDto
 import com.example.coverdesign.data.remote.service.RehabApiService
 import com.example.coverdesign.domain.model.GaitProfileInput
+import com.example.coverdesign.domain.model.GaitSession
 import com.example.coverdesign.domain.model.RehabData
 import com.example.coverdesign.domain.model.RehabTask
 import com.example.coverdesign.domain.repo.RehabRepository
@@ -64,6 +65,16 @@ class RehabRepositoryImpl(
                 Resource.Success(api.getSessionStatus(taskId).toDomain())
             } catch (e: Exception) {
                 Resource.Error("Failed to get session status: ${e.message}", e)
+            }
+        }
+
+    override suspend fun submitSessionData(session: GaitSession): Resource<Unit> =
+        withContext(Dispatchers.Default) {
+            try {
+                api.postSessionData(session.toDto())
+                Resource.Success(Unit)
+            } catch (e: Exception) {
+                Resource.Error("Failed to upload session data: ${e.message}", e)
             }
         }
 }

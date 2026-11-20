@@ -25,7 +25,7 @@ matching DTOs/mappers; **field names and types below are the contract — match 
             │ BACKEND                                                          │
             │  1. create task (status=processing), return task_id              │
             │  2. fetch video from Firebase path                               │
-            │  3. pose/gait analysis  → gait_analysis + position_series        │
+            │  3. pose/gait analysis  → gait_report (per-line inclinations)    │
             │  4. (optional) attach smart-insole pressure_data if available    │
             │  5. build GaitSession, persist under the user                    │
             │  6. task.status = ready, task.session = <GaitSession>            │
@@ -39,11 +39,12 @@ matching DTOs/mappers; **field names and types below are the contract — match 
 Client panels consume the result as:
 - **Left panel ("COP Trajectory")** ← `pressure_data.cop_trajectory` (smart-insole data).
   If `pressure_data` is `null`, the client shows a "connect insole" placeholder.
-- **Right panel ("Body Deviation")** ← `gait_analysis.position_series` (scanner/pose data).
+- **Right panel ("Body-Line Tilt" / "Body-Line Inclination")** ← `gait_report.typical_inclinations`
+  (scanner/pose data; mean body-line tilt per metric, in degrees).
   If the user has no session yet, the client shows a "make a scan" placeholder.
 
-The uploaded **video drives the scanner/pose output** (`gait_analysis`, `position_series`).
-`pressure_data` is separate smart-insole telemetry — include it only when available for
+The uploaded **video drives the scanner/pose output** (`gait_report`, the per-metric inclination
+angles). `pressure_data` is separate smart-insole telemetry — include it only when available for
 that user/session, otherwise send `null`.
 
 ---
@@ -57,47 +58,52 @@ that user/session, otherwise send `null`.
   "patient_uid": "abc123",
   "timestamp_ms": 1731801600000,
   "duration_seconds": 420,
-  "gait_analysis": { /* GaitAnalysisResult */ },
+  "gait_report": { /* GaitReport */ },
   "pressure_data": { /* InsoleData */ } | null,
   "notes": ""
 }
 ```
 | field | type | notes |
 |-------|------|-------|
-| `id` | string | unique per session |
+| `id` | string | unique per session (= the uploaded video's id) |
 | `patient_uid` | string | owner uid |
 | `timestamp_ms` | int64 | epoch millis of the recording |
 | `duration_seconds` | int | recording length |
-| `gait_analysis` | GaitAnalysisResult | required |
+| `gait_report` | GaitReport | required |
 | `pressure_data` | InsoleData \| null | null when no insole data |
 | `notes` | string | may be `""` |
 
-### GaitAnalysisResult
+### GaitReport
+Mirrors the on-device gait engine's numeric output. Values are **mean-absolute inclination
+angles in degrees** per body line and camera view — *not* 0–100 health scores. Metric keys are
+a fixed set: `FRONT_SHOULDERS`, `FRONT_PELVIS`, `FRONT_KNEES`, `BACK_SHOULDERS`, `BACK_PELVIS`,
+`BACK_SPINE` (a `POSE` recording omits `BACK_SPINE`).
 ```json
 {
-  "posture_score": 85.0,
-  "balance_score": 87.0,
-  "symmetry_score": 83.0,
-  "scoliosis_score": 88.0,
-  "position_series": [ { "time_ms": 0, "deviation_x": 1.2, "deviation_y": -0.4 } ],
-  "abnormalities": ["Slight anterior lean detected"]
+  "typical_inclinations": { "FRONT_SHOULDERS": 2.5, "FRONT_PELVIS": 2.0, "FRONT_KNEES": 2.8 },
+  "sample_counts":        { "FRONT_SHOULDERS": 80,  "FRONT_PELVIS": 80,  "FRONT_KNEES": 80 },
+  "qualified_metrics":    ["FRONT_SHOULDERS", "FRONT_PELVIS", "FRONT_KNEES"],
+  "measurement_method": "MARKERS",
+  "acquisition_source": "VIDEO",
+  "protocol_version": 7,
+  "accepted_frames": 500,
+  "rejected_frames": 40,
+  "front_valid_duration_ms": 210000,
+  "back_valid_duration_ms": 210000,
+  "comparison_group_id": "0000…(64 hex)"
 }
 ```
 | field | type | range / units |
 |-------|------|---------------|
-| `posture_score` | float | 0–100 |
-| `balance_score` | float | 0–100 |
-| `symmetry_score` | float | 0–100 (gait L/R symmetry) |
-| `scoliosis_score` | float | 0–100 (100 = straight spine) |
-| `position_series` | BodyPosition[] | time-ordered samples |
-| `abnormalities` | string[] | may be empty |
-
-### BodyPosition
-| field | type | units |
-|-------|------|-------|
-| `time_ms` | int64 | sample time |
-| `deviation_x` | float | lateral deviation, cm (0 = ideal) |
-| `deviation_y` | float | anterior-posterior deviation, cm |
+| `typical_inclinations` | map<string,float> | metric key → mean-absolute tilt, degrees 0–90 |
+| `sample_counts` | map<string,int> | per-metric usable sample count (same keys) |
+| `qualified_metrics` | string[] | metrics with enough data to trend (subset of the keys) |
+| `measurement_method` | string | `"MARKERS"` \| `"POSE"` |
+| `acquisition_source` | string | `"LIVE"` \| `"VIDEO"` |
+| `protocol_version` | int | capture protocol (e.g. 7) |
+| `accepted_frames` / `rejected_frames` | int | tracking frame counts |
+| `front_valid_duration_ms` / `back_valid_duration_ms` | int64 | usable per-view duration |
+| `comparison_group_id` | string | 64-hex fingerprint of capture settings; only sessions sharing it are comparable |
 
 ### InsoleData (nullable on GaitSession)
 ```json
@@ -235,21 +241,49 @@ On failure:
 - On `ready`, the produced `GaitSession` must also be persisted so the subsequent
   `GET /rehab` includes it.
 
+### 3.5 `POST /rehab/sessions_data`
+Client-computed **fallback upload**. The Android gait module computes the report on-device; the
+client posts it so the server can persist the result immediately even when its own
+video-analysis module (§3.3/§3.4) is unavailable or faulty.
+
+Request body = a full `GaitSession` (§2). The `id` carries the uploaded video's session id, so a
+later server-side analysis of the same video can reconcile against it.
+```json
+{
+  "id": "pose_1731801600000",
+  "patient_uid": "ignored — resolved from auth",
+  "timestamp_ms": 1731801600000,
+  "duration_seconds": 8,
+  "gait_report": { /* GaitReport */ },
+  "pressure_data": null,
+  "notes": ""
+}
+```
+- Resolve the owner from the auth token; **ignore any client-supplied `patient_uid`**.
+- Validate `gait_report` the same way as a produced report (metric keys, angle ranges 0–90).
+- Upsert by `id` under the caller and persist so `GET /rehab` reflects it. Echo the stored
+  `GaitSession` (200).
+- Idempotent: re-posting the same `id` replaces the stored session.
+
 ---
 
 ## 4. Processing stages (step 2–6)
 
 1. **Fetch** the video from `video_path` (Firebase Storage).
-2. **Pose/gait analysis** (e.g. pose estimation over frames) →
-   - `posture_score`, `balance_score`, `symmetry_score`, `scoliosis_score` (0–100),
-   - `position_series` (body deviation over time, cm),
-   - `abnormalities` (human-readable findings; `[]` if none).
+2. **Pose/gait analysis** (e.g. pose estimation over frames) → a `gait_report`:
+   - `typical_inclinations` (mean-absolute tilt per body line, degrees 0–90),
+   - `sample_counts` + `qualified_metrics` (which lines had enough data to trend),
+   - `measurement_method`, `acquisition_source`, `protocol_version`, frame/duration counts,
+   - `comparison_group_id` (fingerprint of the capture settings used).
 3. **Insole data** — if the patient has smart-insole telemetry for this session, attach
    `pressure_data` (foot pressure maps + `cop_trajectory`); otherwise set `pressure_data: null`.
 4. **Assemble** a `GaitSession` (new `id`, caller `patient_uid`, `timestamp_ms`,
    `duration_seconds` from the request, `notes` optional).
 5. **Persist** under the user and set the task to `ready` with `session` populated.
 6. On any unrecoverable error set the task to `failed`.
+
+> If the analysis module is unavailable, the client-computed report from §3.5 is the fallback
+> source of truth for that session.
 
 ---
 
@@ -258,10 +292,10 @@ On failure:
 Attach the following fixture to a **demo/test account only** (mirrors the client's former
 `RehabMockData`, now owned by the server):
 
-- **5 GaitSessions**, ~7 days apart, scores rising over time
-  (posture/balance/symmetry/scoliosis ≈ 55 → 85; `duration_seconds` 300 → 420).
-- Each session `position_series`: a damped-sine body-deviation curve
-  (`deviation_x ≈ 10·e^(-2t)·sin(6πt)`, `deviation_y ≈ 6·e^(-1.5t)·cos(5πt)`, ~60 samples).
+- **5 GaitSessions**, ~7 days apart, inclination angles **decreasing** over time (improving):
+  per-line `typical_inclinations` ≈ 8° → 2.5°; `duration_seconds` 300 → 420;
+  `measurement_method = "MARKERS"`, `acquisition_source = "VIDEO"`, `protocol_version = 7`,
+  all six metrics `qualified`.
 - Each session `pressure_data.cop_trajectory`: a lissajous path
   (`x = 30·sin(t)`, `y = 20·sin(2t + π/4)`, ~120 points); foot maps as in the InsoleData
   example; `cadence ≈ 100`.

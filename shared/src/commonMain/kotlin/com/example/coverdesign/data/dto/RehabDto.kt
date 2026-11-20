@@ -19,28 +19,28 @@ data class GaitSessionDto(
     @SerialName("patient_uid")      val patientUid:      String,
     @SerialName("timestamp_ms")     val timestampMs:     Long,
     @SerialName("duration_seconds") val durationSeconds: Int,
-    @SerialName("gait_analysis")    val gaitAnalysis:    GaitAnalysisResultDto,
+    @SerialName("gait_report")      val gaitReport:      GaitReportDto,
     @SerialName("pressure_data")    val pressureData:    InsoleDataDto? = null,
     @SerialName("notes")            val notes:           String = ""
 )
 
-// ── Gait analysis ─────────────────────────────────────────────────────────────
+// ── Gait report ───────────────────────────────────────────────────────────────
+// Mirrors the on-device gait module's numeric output (GaitCloudReport) minus its Firestore
+// transport fields. Metric keys ("FRONT_SHOULDERS"…) match the gait Firestore doc and rules.
 
 @Serializable
-data class GaitAnalysisResultDto(
-    @SerialName("posture_score")   val postureScore:   Float,   // 0–100
-    @SerialName("balance_score")   val balanceScore:   Float,   // 0–100
-    @SerialName("symmetry_score")  val symmetryScore:  Float,   // 0–100
-    @SerialName("scoliosis_score") val scoliosisScore: Float,   // 0–100; 100 = straight
-    @SerialName("position_series") val positionSeries: List<BodyPositionDto>,
-    @SerialName("abnormalities")   val abnormalities:  List<String>
-)
-
-@Serializable
-data class BodyPositionDto(
-    @SerialName("time_ms")     val timeMs:     Long,
-    @SerialName("deviation_x") val deviationX: Float,  // lateral cm
-    @SerialName("deviation_y") val deviationY: Float   // anterior-posterior cm
+data class GaitReportDto(
+    @SerialName("typical_inclinations")    val typicalInclinations:  Map<String, Double>, // deg 0..90
+    @SerialName("sample_counts")           val sampleCounts:         Map<String, Int>,
+    @SerialName("qualified_metrics")       val qualifiedMetrics:     List<String>,
+    @SerialName("measurement_method")      val measurementMethod:    String,  // "MARKERS" | "POSE"
+    @SerialName("acquisition_source")      val acquisitionSource:    String,  // "LIVE" | "VIDEO"
+    @SerialName("protocol_version")        val protocolVersion:      Int,
+    @SerialName("accepted_frames")         val acceptedFrames:       Int,
+    @SerialName("rejected_frames")         val rejectedFrames:       Int,
+    @SerialName("front_valid_duration_ms") val frontValidDurationMs: Long,
+    @SerialName("back_valid_duration_ms")  val backValidDurationMs:  Long,
+    @SerialName("comparison_group_id")     val comparisonGroupId:    String
 )
 
 // ── Insole / pressure data ────────────────────────────────────────────────────

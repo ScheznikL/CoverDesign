@@ -1,11 +1,13 @@
 package com.example.coverdesign.data.dto
 
-import com.example.coverdesign.domain.model.BodyPosition
 import com.example.coverdesign.domain.model.CopPoint
 import com.example.coverdesign.domain.model.DoctorRecommendation
 import com.example.coverdesign.domain.model.FootPressureMap
-import com.example.coverdesign.domain.model.GaitAnalysisResult
+import com.example.coverdesign.domain.model.GaitAcquisitionSource
+import com.example.coverdesign.domain.model.GaitMeasurementMethod
+import com.example.coverdesign.domain.model.GaitMetricKey
 import com.example.coverdesign.domain.model.GaitProfileInput
+import com.example.coverdesign.domain.model.GaitReport
 import com.example.coverdesign.domain.model.GaitSession
 import com.example.coverdesign.domain.model.InsoleData
 import com.example.coverdesign.domain.model.RecommendationTag
@@ -37,25 +39,32 @@ fun GaitSessionDto.toDomain() = GaitSession(
     patientUid      = patientUid,
     timestamp       = timestampMs,
     durationSeconds = durationSeconds,
-    gaitAnalysis    = gaitAnalysis.toDomain(),
+    report          = gaitReport.toDomain(),
     pressureData    = pressureData?.toDomain(),
     notes           = notes
 )
 
-fun GaitAnalysisResultDto.toDomain() = GaitAnalysisResult(
-    postureScore   = postureScore,
-    balanceScore   = balanceScore,
-    symmetryScore  = symmetryScore,
-    scoliosisScore = scoliosisScore,
-    positionSeries = positionSeries.map { it.toDomain() },
-    abnormalities  = abnormalities
+fun GaitReportDto.toDomain() = GaitReport(
+    typicalInclinations = typicalInclinations.mapKeysToMetric { it.toFloat() },
+    sampleCounts        = sampleCounts.mapKeysToMetric { it },
+    qualifiedMetrics    = qualifiedMetrics.mapNotNull { GaitMetricKey.fromWire(it) }.toSet(),
+    measurementMethod   = GaitMeasurementMethod.fromRaw(measurementMethod),
+    acquisitionSource   = GaitAcquisitionSource.fromRaw(acquisitionSource),
+    protocolVersion     = protocolVersion,
+    acceptedFrames      = acceptedFrames,
+    rejectedFrames      = rejectedFrames,
+    frontValidDurationMs = frontValidDurationMs,
+    backValidDurationMs  = backValidDurationMs,
+    comparisonGroupId    = comparisonGroupId
 )
 
-fun BodyPositionDto.toDomain() = BodyPosition(
-    timeMs     = timeMs,
-    deviationX = deviationX,
-    deviationY = deviationY
-)
+/** Maps wire metric keys to [GaitMetricKey], dropping unknown keys defensively. */
+private inline fun <V, R> Map<String, V>.mapKeysToMetric(transform: (V) -> R): Map<GaitMetricKey, R> =
+    buildMap {
+        this@mapKeysToMetric.forEach { (raw, value) ->
+            GaitMetricKey.fromWire(raw)?.let { put(it, transform(value)) }
+        }
+    }
 
 fun InsoleDataDto.toDomain() = InsoleData(
     leftFoot      = leftFoot.toDomain(),
@@ -98,24 +107,23 @@ fun GaitSession.toDto() = GaitSessionDto(
     patientUid      = patientUid,
     timestampMs     = timestamp,
     durationSeconds = durationSeconds,
-    gaitAnalysis    = gaitAnalysis.toDto(),
+    gaitReport      = report.toDto(),
     pressureData    = pressureData?.toDto(),
     notes           = notes
 )
 
-fun GaitAnalysisResult.toDto() = GaitAnalysisResultDto(
-    postureScore   = postureScore,
-    balanceScore   = balanceScore,
-    symmetryScore  = symmetryScore,
-    scoliosisScore = scoliosisScore,
-    positionSeries = positionSeries.map { it.toDto() },
-    abnormalities  = abnormalities
-)
-
-fun BodyPosition.toDto() = BodyPositionDto(
-    timeMs     = timeMs,
-    deviationX = deviationX,
-    deviationY = deviationY
+fun GaitReport.toDto() = GaitReportDto(
+    typicalInclinations  = typicalInclinations.entries.associate { it.key.wireName to it.value.toDouble() },
+    sampleCounts         = sampleCounts.entries.associate { it.key.wireName to it.value },
+    qualifiedMetrics     = qualifiedMetrics.map { it.wireName },
+    measurementMethod    = measurementMethod.name,
+    acquisitionSource    = acquisitionSource.name,
+    protocolVersion      = protocolVersion,
+    acceptedFrames       = acceptedFrames,
+    rejectedFrames       = rejectedFrames,
+    frontValidDurationMs = frontValidDurationMs,
+    backValidDurationMs  = backValidDurationMs,
+    comparisonGroupId    = comparisonGroupId
 )
 
 fun InsoleData.toDto() = InsoleDataDto(

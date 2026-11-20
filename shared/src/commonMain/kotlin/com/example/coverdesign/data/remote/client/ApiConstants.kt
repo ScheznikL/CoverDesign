@@ -4,6 +4,7 @@ package com.example.coverdesign.data.remote.client
 object ApiConstants {
     // swap via BuildConfig / xcconfig per environment
     const val BASE_URL = "http://10.0.2.2:8000/"
+//    const val BASE_URL = "http://192.168.0.185:8000/"
 //    const val BASE_URL = "https://8000-01jvzhcj3c8gp76vp628c9jp47.cloudspaces.litng.ai/"
 
     object Endpoints {
@@ -34,6 +35,7 @@ object ApiConstants {
         const val REHAB_PROFILE = "/rehab/profile"                  // GET/PUT — current user's gait profile (biometrics + settings)
         const val SUBMIT_REHAB_SESSION = "/rehab/sessions"          // POST — kick off processing of a recorded video
         const val REHAB_SESSION_STATUS = "/rehab/sessions/{taskId}/status" // GET — poll processing status
+        const val REHAB_SESSION_DATA = "/rehab/sessions_data"       // POST — client-computed fallback report (id = video id)
 
         // care (doctor ↔ patient)
         const val CARE_PATIENTS = "/care/patients"  // GET — the calling doctor's patient roster

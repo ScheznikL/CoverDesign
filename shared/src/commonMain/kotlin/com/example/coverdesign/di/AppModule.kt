@@ -3,6 +3,7 @@ package com.example.coverdesign.di
 // shared/commonMain/di/AppModule.kt
 
 import com.example.coverdesign.data.local.DatabaseDriverFactory
+import com.example.coverdesign.data.remote.client.TempApiClientFactory
 import com.example.coverdesign.data.remote.client.createHttpClient
 import com.example.coverdesign.data.remote.firestore.CareCloudDataSource
 import com.example.coverdesign.data.remote.firestore.OrderCloudDataSource
@@ -32,8 +33,8 @@ import com.example.coverdesign.domain.usecase.CreateConfigFromProductUseCase
 import com.example.coverdesign.domain.usecase.GenerateModelUseCase
 import com.example.coverdesign.domain.usecase.GenerateProstheticCoverModelUseCase
 import com.example.coverdesign.domain.usecase.GetCatalogUseCase
-import com.example.coverdesign.domain.usecase.GetOrderDetailUseCase
 import com.example.coverdesign.domain.usecase.GetDoctorPatientsUseCase
+import com.example.coverdesign.domain.usecase.GetOrderDetailUseCase
 import com.example.coverdesign.domain.usecase.GetOrderListUseCase
 import com.example.coverdesign.domain.usecase.GetRehabDataUseCase
 import com.example.coverdesign.domain.usecase.LinkOrderToAdaptedModelUseCase
@@ -47,9 +48,9 @@ import com.example.coverdesign.domain.usecase.SubmitRecommendationUseCase
 import com.example.coverdesign.domain.usecase.SubmitRehabSessionUseCase
 import com.example.coverdesign.domain.usecase.SyncOrdersUseCase
 import com.example.coverdesign.domain.usecase.UpdateConfigUseCase
-import com.example.coverdesign.domain.usecase.UpsertGaitProfileUseCase
 import com.example.coverdesign.domain.usecase.UploadReferencePhotoUseCase
 import com.example.coverdesign.domain.usecase.UploadTextureImageUseCase
+import com.example.coverdesign.domain.usecase.UpsertGaitProfileUseCase
 import com.example.coverdesign.domain.validator.MeasurementValidator
 import com.example.coverdesign.ui.viewmodel.AppViewModel
 import com.example.coverdesign.ui.viewmodel.AuthViewModel
@@ -94,6 +95,12 @@ val networkModule = module {
     // Ktor HttpClient — single instance shared across all services
     single { createHttpClient(tokenStorage = get()) }
 
+    single {
+        TempApiClientFactory.create(
+            httpClient = get(),
+            baseUrl = "http://192.168.0.185:8000"
+        )
+    }
     // API services
     singleOf(::ProductApiService)
     singleOf(::Model3DApiService)
@@ -205,7 +212,8 @@ val viewModelModule = module {
             getRehabData = get(),
             authRepo = get(),
             logout = get(),
-            syncOrders = get()
+            syncOrders = get(),
+            apiClient = get()
         )
     }
     viewModel { AuthViewModel(get(), get(), get()) }
